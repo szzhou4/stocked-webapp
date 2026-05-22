@@ -284,7 +284,7 @@ export default function ShoppingPage() {
 
       {/* Purchase modal */}
       {purchaseModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
             <div>
               <h3 className="font-semibold text-lg">{purchaseModal.name}</h3>

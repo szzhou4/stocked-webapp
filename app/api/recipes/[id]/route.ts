@@ -7,15 +7,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data, error } = await supabase
-    .from("recipes")
-    .select("*, recipe_ingredients(*)")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .single();
+  const [{ data, error }, { data: pantryData }] = await Promise.all([
+    supabase.from("recipes").select("*, recipe_ingredients(*)").eq("id", id).eq("user_id", user.id).single(),
+    supabase.from("pantry_items").select("name, quantity, min_quantity, unit").eq("user_id", user.id),
+  ]);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
-  return NextResponse.json({ recipe: data });
+  return NextResponse.json({ recipe: data, pantryItems: pantryData || [] });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

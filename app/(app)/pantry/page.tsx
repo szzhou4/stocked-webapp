@@ -207,35 +207,45 @@ export default function PantryPage() {
                   </div>
 
                   {isEditing ? (
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        type="number"
-                        defaultValue={item.quantity}
-                        onBlur={(e) => handleUpdate(item.id, "quantity", parseFloat(e.target.value))}
-                        className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                        placeholder="Have"
-                      />
-                      <input
-                        type="number"
-                        defaultValue={item.min_quantity}
-                        onBlur={(e) => handleUpdate(item.id, "min_quantity", parseFloat(e.target.value))}
-                        className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                        placeholder="Min"
-                      />
-                      <span className="text-xs text-gray-400 self-center">{item.unit || "units"}</span>
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex gap-2">
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[10px] text-gray-400 uppercase tracking-wide">Have</label>
+                          <input
+                            type="number"
+                            defaultValue={item.quantity}
+                            onBlur={(e) => handleUpdate(item.id, "quantity", parseFloat(e.target.value))}
+                            className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[10px] text-gray-400 uppercase tracking-wide">Min</label>
+                          <input
+                            type="number"
+                            defaultValue={item.min_quantity}
+                            onBlur={(e) => handleUpdate(item.id, "min_quantity", parseFloat(e.target.value))}
+                            className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-0.5 justify-end">
+                          <label className="text-[10px] text-gray-400 uppercase tracking-wide">Unit</label>
+                          <span className="text-sm text-gray-500 py-1">{item.unit || "—"}</span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-400">Min triggers low-stock alert &amp; auto-adds to shopping list</p>
                     </div>
                   ) : (
                     <div className="mt-1 flex items-center gap-2">
-                      <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                        <div
-                          className={`h-1.5 rounded-full transition-all ${isLow ? "bg-amber-400" : "bg-indigo-500"}`}
-                          style={{
-                            width: item.min_quantity > 0
-                              ? `${Math.min(100, (item.quantity / (item.min_quantity * 3)) * 100)}%`
-                              : "50%"
-                          }}
-                        />
-                      </div>
+                      {item.min_quantity > 0 ? (
+                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full transition-all ${isLow ? "bg-amber-400" : "bg-indigo-500"}`}
+                            style={{ width: `${Math.min(100, (item.quantity / (item.min_quantity * 2)) * 100)}%` }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1" />
+                      )}
                       <span className="text-xs text-gray-500 shrink-0">
                         {formatQuantity(item.quantity, item.unit)}
                         {item.min_quantity > 0 && <span className="text-gray-300"> / {formatQuantity(item.min_quantity, item.unit)} min</span>}
