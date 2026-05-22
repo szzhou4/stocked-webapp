@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import { Plus, ExternalLink } from "lucide-react";
+import { Plus, ExternalLink, BookOpen, Utensils } from "lucide-react";
 import type { Recipe } from "@/lib/types";
-import LogoutButton from "@/components/logout-button";
 
 export default async function RecipesPage() {
   const supabase = await createClient();
@@ -16,23 +15,37 @@ export default async function RecipesPage() {
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Recipes</h1>
-        <div className="flex items-center gap-2">
-          <LogoutButton />
-          <Link
-            href="/recipes/new"
-            className="flex items-center gap-1 bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-green-700 transition-colors"
-          >
-            <Plus size={16} />
-            Add
-          </Link>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Recipes</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} saved
+          </p>
         </div>
+        <Link
+          href="/recipes/new"
+          className="flex items-center gap-1.5 bg-indigo-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
+        >
+          <Plus size={16} />
+          Add
+        </Link>
       </div>
 
       {recipes.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <p className="text-lg font-medium">No recipes yet</p>
-          <p className="text-sm mt-1">Add your first recipe to get started.</p>
+        <div className="bg-white rounded-xl border border-gray-200 px-6 py-16 text-center">
+          <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <BookOpen className="w-6 h-6 text-indigo-600" />
+          </div>
+          <p className="text-base font-semibold text-gray-900">No recipes yet</p>
+          <p className="text-sm text-gray-500 mt-1 mb-5">
+            Paste a recipe link, photo, or text to get started.
+          </p>
+          <Link
+            href="/recipes/new"
+            className="inline-flex items-center gap-1.5 bg-indigo-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            <Plus size={16} />
+            Add your first recipe
+          </Link>
         </div>
       ) : (
         <div className="space-y-3">
@@ -40,18 +53,18 @@ export default async function RecipesPage() {
             <Link
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
-              className="block bg-white rounded-xl border p-4 hover:border-green-300 transition-colors"
+              className="group flex items-center gap-3.5 bg-white rounded-xl border border-gray-200 p-4 hover:border-indigo-300 hover:shadow-sm transition-all"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h2 className="font-semibold truncate">{recipe.name}</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">{recipe.servings} servings</p>
-                  {recipe.notes && <p className="text-sm text-gray-400 mt-1 truncate">{recipe.notes}</p>}
-                </div>
-                {recipe.source_url && (
-                  <ExternalLink size={14} className="text-gray-300 shrink-0 mt-1" />
-                )}
+              <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-indigo-100 transition-colors">
+                <Utensils className="w-5 h-5 text-indigo-600" />
               </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold text-gray-900 truncate">{recipe.name}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">{recipe.servings} servings</p>
+              </div>
+              {recipe.source_url && (
+                <ExternalLink size={14} className="text-gray-300 shrink-0" />
+              )}
             </Link>
           ))}
         </div>

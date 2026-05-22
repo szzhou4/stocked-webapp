@@ -131,19 +131,24 @@ export default function ShoppingPage() {
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Shopping List</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Shopping List</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {unchecked.length} to buy{checked.length > 0 ? ` · ${checked.length} done` : ""}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           {checked.length > 0 && (
             <button
               onClick={clearChecked}
-              className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
             >
-              Clear {checked.length} done
+              Clear done
             </button>
           )}
           <button
             onClick={() => setAddingManual((v) => !v)}
-            className="flex items-center gap-1 bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-green-700 transition-colors"
+            className="flex items-center gap-1.5 bg-indigo-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
           >
             <Plus size={16} />
             Add
@@ -158,7 +163,7 @@ export default function ShoppingPage() {
             placeholder="Item name"
             value={newItem.name}
             onChange={(e) => setNewItem((p) => ({ ...p, name: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <div className="flex gap-2">
             <input
@@ -166,18 +171,18 @@ export default function ShoppingPage() {
               type="number"
               value={newItem.quantity}
               onChange={(e) => setNewItem((p) => ({ ...p, quantity: e.target.value }))}
-              className="w-20 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+              className="w-20 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
             <input
               placeholder="Unit"
               value={newItem.unit}
               onChange={(e) => setNewItem((p) => ({ ...p, unit: e.target.value }))}
-              className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+              className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
             <select
               value={newItem.store}
               onChange={(e) => setNewItem((p) => ({ ...p, store: e.target.value as Store }))}
-              className="flex-1 border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+              className="flex-1 border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               {Object.entries(STORE_LABELS).map(([v, l]) => (
                 <option key={v} value={v}>{l}</option>
@@ -187,12 +192,12 @@ export default function ShoppingPage() {
           <select
             value={newItem.category}
             onChange={(e) => setNewItem((p) => ({ ...p, category: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <div className="flex gap-2">
-            <button onClick={handleAddManual} className="flex-1 bg-green-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-green-700 transition-colors">
+            <button onClick={handleAddManual} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 transition-colors">
               Add item
             </button>
             <button onClick={() => setAddingManual(false)} className="px-3 py-2 text-gray-400 hover:text-gray-600 transition-colors">
@@ -232,7 +237,7 @@ export default function ShoppingPage() {
                     <button
                       onClick={() => handleCheck(item)}
                       disabled={checkingId === item.id}
-                      className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-green-500 transition-colors shrink-0"
+                      className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 transition-colors shrink-0"
                     />
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium">{item.name}</span>
@@ -260,7 +265,7 @@ export default function ShoppingPage() {
               <div key={item.id} className="flex items-center gap-3 bg-gray-50 border rounded-lg px-3 py-2.5 opacity-60">
                 <button
                   onClick={() => handleUncheck(item)}
-                  className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shrink-0"
+                  className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center shrink-0"
                 >
                   <Check size={12} className="text-white" />
                 </button>
@@ -291,13 +296,13 @@ export default function ShoppingPage() {
                 value={purchaseQty}
                 onChange={(e) => setPurchaseQty(e.target.value)}
                 placeholder="Amount"
-                className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <input
                 value={purchaseUnit}
                 onChange={(e) => setPurchaseUnit(e.target.value)}
                 placeholder="Unit"
-                className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             <div className="flex gap-3">
@@ -309,7 +314,7 @@ export default function ShoppingPage() {
               </button>
               <button
                 onClick={confirmPurchase}
-                className="flex-1 bg-green-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-green-700 transition-colors"
+                className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors"
               >
                 Confirm
               </button>

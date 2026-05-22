@@ -122,7 +122,7 @@ export default function NewRecipePage() {
               key={m}
               onClick={() => setMode(m)}
               className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                mode === m ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-500"
+                mode === m ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500"
               }`}
             >
               <Icon size={16} />
@@ -139,7 +139,7 @@ export default function NewRecipePage() {
           placeholder="https://..."
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-500"
+          className="w-full border rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       )}
       {mode === "text" && (
@@ -148,12 +148,12 @@ export default function NewRecipePage() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={6}
-          className="w-full border rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+          className="w-full border rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
         />
       )}
       {mode === "image" && (
         <div
-          className="border-2 border-dashed rounded-lg p-4 text-center mb-3 cursor-pointer hover:border-green-400 transition-colors"
+          className="border-2 border-dashed rounded-lg p-4 text-center mb-3 cursor-pointer hover:border-indigo-400 transition-colors"
           onClick={() => fileRef.current?.click()}
         >
           {imagePreview ? (
@@ -175,7 +175,7 @@ export default function NewRecipePage() {
       <button
         onClick={handleExtract}
         disabled={extracting || (mode === "url" && !url) || (mode === "text" && !text) || (mode === "image" && !imageBase64)}
-        className="w-full bg-green-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-green-700 disabled:opacity-50 mb-4 flex items-center justify-center gap-2 transition-colors"
+        className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 mb-4 flex items-center justify-center gap-2 transition-colors"
       >
         {extracting ? <><Loader2 size={16} className="animate-spin" /> Extracting ingredients…</> : "Extract ingredients"}
       </button>
@@ -192,7 +192,7 @@ export default function NewRecipePage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My recipe"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             <div>
@@ -202,7 +202,7 @@ export default function NewRecipePage() {
                 value={servings}
                 min={1}
                 onChange={(e) => setServings(Number(e.target.value))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>
@@ -219,7 +219,7 @@ export default function NewRecipePage() {
                       <input
                         value={ing.name}
                         onChange={(e) => updateIngredient(i, "name", e.target.value)}
-                        className="w-full text-sm font-medium border-b border-transparent hover:border-gray-200 focus:border-green-400 focus:outline-none pb-0.5 mb-1"
+                        className="w-full text-sm font-medium border-b border-transparent hover:border-gray-200 focus:border-indigo-400 focus:outline-none pb-0.5 mb-1"
                       />
                       <div className="flex gap-2">
                         <input
@@ -227,18 +227,18 @@ export default function NewRecipePage() {
                           onChange={(e) => updateIngredient(i, "quantity", parseFloat(e.target.value) || 0)}
                           placeholder="qty"
                           type="number"
-                          className="w-16 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400"
+                          className="w-16 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         />
                         <input
                           value={ing.unit ?? ""}
                           onChange={(e) => updateIngredient(i, "unit", e.target.value)}
                           placeholder="unit"
-                          className="w-20 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400"
+                          className="w-20 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         />
                         <select
                           value={ing.store}
                           onChange={(e) => updateIngredient(i, "store", e.target.value)}
-                          className="flex-1 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400"
+                          className="flex-1 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         >
                           {Object.entries(STORE_LABELS).map(([v, l]) => (
                             <option key={v} value={v}>{l}</option>
@@ -261,7 +261,7 @@ export default function NewRecipePage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full bg-green-600 text-white rounded-lg py-3 font-medium hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+            className="w-full bg-indigo-600 text-white rounded-lg py-3 font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
           >
             {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : "Save recipe"}
           </button>

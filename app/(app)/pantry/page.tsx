@@ -77,10 +77,15 @@ export default function PantryPage() {
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Pantry</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Pantry</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {items.length} {items.length === 1 ? "item" : "items"} stocked
+          </p>
+        </div>
         <button
           onClick={() => setAdding((v) => !v)}
-          className="flex items-center gap-1 bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-green-700 transition-colors"
+          className="flex items-center gap-1.5 bg-indigo-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
         >
           <Plus size={16} />
           Add
@@ -105,7 +110,7 @@ export default function PantryPage() {
             placeholder="Item name"
             value={newItem.name}
             onChange={(e) => setNewItem((p) => ({ ...p, name: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <div className="grid grid-cols-3 gap-2">
             <div>
@@ -115,7 +120,7 @@ export default function PantryPage() {
                 placeholder="0"
                 value={newItem.quantity}
                 onChange={(e) => setNewItem((p) => ({ ...p, quantity: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
             <div>
@@ -125,7 +130,7 @@ export default function PantryPage() {
                 placeholder="0"
                 value={newItem.min_quantity}
                 onChange={(e) => setNewItem((p) => ({ ...p, min_quantity: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
             <div>
@@ -134,7 +139,7 @@ export default function PantryPage() {
                 placeholder="lbs"
                 value={newItem.unit}
                 onChange={(e) => setNewItem((p) => ({ ...p, unit: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
           </div>
@@ -142,20 +147,20 @@ export default function PantryPage() {
             <select
               value={newItem.store}
               onChange={(e) => setNewItem((p) => ({ ...p, store: e.target.value as Store }))}
-              className="border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+              className="border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               {Object.entries(STORE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
             <select
               value={newItem.category}
               onChange={(e) => setNewItem((p) => ({ ...p, category: e.target.value }))}
-              className="border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+              className="border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleAdd} className="flex-1 bg-green-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-green-700 transition-colors">
+            <button onClick={handleAdd} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 transition-colors">
               Add to pantry
             </button>
             <button onClick={() => setAdding(false)} className="px-3 text-gray-400 hover:text-gray-600 transition-colors">
@@ -191,7 +196,7 @@ export default function PantryPage() {
                       {isLow && <AlertTriangle size={14} className="text-amber-500" />}
                       <button
                         onClick={() => setEditing(isEditing ? null : item.id)}
-                        className="text-xs text-gray-400 hover:text-green-600 transition-colors"
+                        className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
                       >
                         {isEditing ? "Done" : "Edit"}
                       </button>
@@ -207,14 +212,14 @@ export default function PantryPage() {
                         type="number"
                         defaultValue={item.quantity}
                         onBlur={(e) => handleUpdate(item.id, "quantity", parseFloat(e.target.value))}
-                        className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+                        className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         placeholder="Have"
                       />
                       <input
                         type="number"
                         defaultValue={item.min_quantity}
                         onBlur={(e) => handleUpdate(item.id, "min_quantity", parseFloat(e.target.value))}
-                        className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+                        className="w-20 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         placeholder="Min"
                       />
                       <span className="text-xs text-gray-400 self-center">{item.unit || "units"}</span>
@@ -223,7 +228,7 @@ export default function PantryPage() {
                     <div className="mt-1 flex items-center gap-2">
                       <div className="flex-1 bg-gray-100 rounded-full h-1.5">
                         <div
-                          className={`h-1.5 rounded-full transition-all ${isLow ? "bg-amber-400" : "bg-green-500"}`}
+                          className={`h-1.5 rounded-full transition-all ${isLow ? "bg-amber-400" : "bg-indigo-500"}`}
                           style={{
                             width: item.min_quantity > 0
                               ? `${Math.min(100, (item.quantity / (item.min_quantity * 3)) * 100)}%`

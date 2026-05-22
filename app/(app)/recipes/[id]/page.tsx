@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ShoppingCart, ChefHat, ExternalLink, Trash2, Loader2 } from "lucide-react";
 import type { Recipe, RecipeIngredient } from "@/lib/types";
-import { STORE_LABELS, STORE_COLORS } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
 
 export default function RecipeDetailPage() {
@@ -84,7 +83,7 @@ export default function RecipeDetailPage() {
         <span>{recipe.servings} servings</span>
         {recipe.source_url && (
           <a href={recipe.source_url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-green-600 hover:underline">
+            className="flex items-center gap-1 text-indigo-600 hover:underline">
             <ExternalLink size={12} /> Source
           </a>
         )}
@@ -95,7 +94,7 @@ export default function RecipeDetailPage() {
         <button
           onClick={handleAddToShoppingList}
           disabled={addingToList}
-          className="w-full flex items-center justify-center gap-2 border-2 border-green-500 text-green-700 rounded-xl py-3 font-medium hover:bg-green-50 disabled:opacity-50 transition-colors"
+          className="w-full flex items-center justify-center gap-2 border-2 border-indigo-500 text-indigo-700 rounded-xl py-3 font-medium hover:bg-indigo-50 disabled:opacity-50 transition-colors"
         >
           {addingToList ? <Loader2 size={16} className="animate-spin" /> : <ShoppingCart size={16} />}
           Add to shopping list
@@ -110,13 +109,13 @@ export default function RecipeDetailPage() {
               min={0.5}
               step={0.5}
               onChange={(e) => setCookingServings(Number(e.target.value))}
-              className="w-16 border rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-16 border rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <button
             onClick={handleCook}
             disabled={cooking || !cookingServings}
-            className="flex items-center gap-2 bg-green-600 text-white rounded-xl px-4 py-2 font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 bg-indigo-600 text-white rounded-xl px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {cooking ? <Loader2 size={16} className="animate-spin" /> : <ChefHat size={16} />}
             Cooked!
@@ -125,7 +124,7 @@ export default function RecipeDetailPage() {
       </div>
 
       {message && (
-        <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-700 mb-4">
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-sm text-indigo-700 mb-4">
           {message}
         </div>
       )}
@@ -147,15 +146,6 @@ export default function RecipeDetailPage() {
       </div>
 
       {/* Store breakdown */}
-      <h2 className="font-semibold mt-6 mb-3 text-gray-700">By store</h2>
-      {(["costco", "asian", "generic", "other"] as const).map((store) => {
-        const items = sorted.filter((ing) => {
-          // We don't have store on recipe_ingredients directly, so show all under generic for now
-          return store === "generic";
-        });
-        return null;
-      })}
-      <p className="text-xs text-gray-400">Store assignments visible in Shopping List after adding.</p>
     </div>
   );
 }

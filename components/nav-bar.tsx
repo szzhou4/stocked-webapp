@@ -14,21 +14,36 @@ const tabs = [
 export default function NavBar() {
   const pathname = usePathname();
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t z-50">
-      <div className="flex">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur border-t border-gray-200 z-50">
+      <div className="max-w-lg mx-auto flex">
         {tabs.map(({ href, label, Icon }) => {
           const active = pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={cn(
-                "flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors",
-                active ? "text-green-600" : "text-gray-400 hover:text-gray-600"
-              )}
+              className="flex-1 flex flex-col items-center gap-1 py-2.5"
             >
-              <Icon size={22} strokeWidth={active ? 2.5 : 1.5} />
-              {label}
+              <div
+                className={cn(
+                  "flex items-center justify-center w-12 h-7 rounded-full transition-colors",
+                  active ? "bg-indigo-50" : ""
+                )}
+              >
+                <Icon
+                  size={20}
+                  strokeWidth={active ? 2.5 : 1.75}
+                  className={active ? "text-indigo-600" : "text-gray-400"}
+                />
+              </div>
+              <span
+                className={cn(
+                  "text-[11px] font-medium transition-colors",
+                  active ? "text-indigo-600" : "text-gray-400"
+                )}
+              >
+                {label}
+              </span>
             </Link>
           );
         })}
