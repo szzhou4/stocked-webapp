@@ -3,7 +3,15 @@ export type StoreEntry = { name: string; description: string };
 export type UserSettings = {
   stores: Record<string, StoreEntry>;
   defaultStore: string;
+  skipIngredients: string[];
 };
+
+export const DEFAULT_SKIP_INGREDIENTS = [
+  "water", "salt", "pepper", "black pepper", "white pepper", "kosher salt",
+  "sea salt", "table salt", "fine salt", "coarse salt", "flaky salt",
+  "salt and pepper", "salt & pepper", "ground pepper", "freshly ground pepper",
+  "to taste", "ice", "ice water", "cold water", "boiling water",
+];
 
 export const DEFAULT_SETTINGS: UserSettings = {
   stores: {
@@ -13,4 +21,5 @@ export const DEFAULT_SETTINGS: UserSettings = {
     other: { name: "Other", description: "Specialty stores, alcohol, items that don't fit elsewhere" },
   },
   defaultStore: "generic",
+  skipIngredients: DEFAULT_SKIP_INGREDIENTS,
 };

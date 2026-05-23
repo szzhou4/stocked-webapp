@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag, Pencil } from "lucide-react";
+import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag, Pencil, Share2, Bookmark, RotateCcw } from "lucide-react";
 import type { ShoppingItem } from "@/lib/types";
 import { STORE_LABELS, STORE_COLORS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
@@ -32,6 +32,33 @@ function UnitSelect({ value, onChange, className }: { value: string; onChange: (
   );
 }
 
+function buildExportText(
+  items: ShoppingItem[],
+  userStores: UserSettings["stores"],
+): string {
+  const active = items.filter((i) => !i.checked && !i.saved_for_later);
+  if (!active.length) return "Shopping list is empty.";
+
+  const grouped: Record<string, ShoppingItem[]> = {};
+  for (const item of active) {
+    if (!grouped[item.store]) grouped[item.store] = [];
+    grouped[item.store].push(item);
+  }
+
+  const lines: string[] = ["🛒 Shopping List", ""];
+  for (const [store, storeItems] of Object.entries(grouped)) {
+    const label = userStores[store]?.name ?? STORE_LABELS[store] ?? store;
+    lines.push(`📍 ${label}`);
+    for (const item of storeItems) {
+      const qty = item.quantity || item.unit ? ` (${formatQuantity(item.quantity, item.unit)})` : "";
+      lines.push(`  ☐ ${item.name}${qty}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
+}
+
 export default function ShoppingPage() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
@@ -52,6 +79,17 @@ export default function ShoppingPage() {
   const [editUnit, setEditUnit] = useState("");
   const [editStore, setEditStore] = useState("");
   const [editCategory, setEditCategory] = useState("");
+
+  // Re-add to list modal (from Save for Later)
+  const [reAddModal, setReAddModal] = useState<ShoppingItem | null>(null);
+  const [reAddQty, setReAddQty] = useState("");
+  const [reAddUnit, setReAddUnit] = useState("");
+  const [reAddStore, setReAddStore] = useState("");
+  const [reAddCategory, setReAddCategory] = useState("");
+
+  // Export modal
+  const [showExport, setShowExport] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Manual add form
   const [addingManual, setAddingManual] = useState(false);
@@ -99,6 +137,14 @@ export default function ShoppingPage() {
     setEditCategory(item.category);
   }
 
+  function openReAddModal(item: ShoppingItem) {
+    setReAddModal(item);
+    setReAddQty(item.quantity?.toString() || "");
+    setReAddUnit(item.unit || "");
+    setReAddStore(item.store);
+    setReAddCategory(item.category);
+  }
+
   async function confirmPurchase() {
     if (!purchaseModal) return;
     setCheckingId(purchaseModal.id);
@@ -134,6 +180,33 @@ export default function ShoppingPage() {
     });
     await load();
     setEditModal(null);
+  }
+
+  async function saveForLater(item: ShoppingItem) {
+    await fetch("/api/shopping", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: item.id, saved_for_later: true }),
+    });
+    await load();
+  }
+
+  async function confirmReAdd() {
+    if (!reAddModal) return;
+    await fetch("/api/shopping", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: reAddModal.id,
+        saved_for_later: false,
+        quantity: parseFloat(reAddQty) || null,
+        unit: reAddUnit || null,
+        store: reAddStore,
+        category: reAddCategory,
+      }),
+    });
+    await load();
+    setReAddModal(null);
   }
 
   async function handleUncheck(item: ShoppingItem) {
@@ -177,9 +250,27 @@ export default function ShoppingPage() {
     await load();
   }
 
-  const unchecked = items.filter((i) => !i.checked);
+  async function handleCopy() {
+    const text = buildExportText(items, userStores);
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleShare() {
+    const text = buildExportText(items, userStores);
+    if (navigator.share) {
+      await navigator.share({ title: "Shopping List", text });
+    } else {
+      await handleCopy();
+    }
+  }
+
+  const unchecked = items.filter((i) => !i.checked && !i.saved_for_later);
   const checked = items.filter((i) => i.checked);
+  const savedForLater = items.filter((i) => i.saved_for_later && !i.checked);
   const grouped = groupItems(unchecked);
+  const exportText = buildExportText(items, userStores);
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
@@ -196,6 +287,14 @@ export default function ShoppingPage() {
           {checked.length > 0 && (
             <button onClick={clearChecked} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
               Clear done
+            </button>
+          )}
+          {(unchecked.length > 0 || savedForLater.length > 0) && (
+            <button
+              onClick={() => setShowExport(true)}
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-indigo-600 border rounded-xl px-3 py-2 hover:border-indigo-300 transition-colors"
+            >
+              <Share2 size={14} /> Export
             </button>
           )}
           <button
@@ -242,7 +341,7 @@ export default function ShoppingPage() {
         </div>
       )}
 
-      {unchecked.length === 0 && checked.length === 0 && (
+      {unchecked.length === 0 && checked.length === 0 && savedForLater.length === 0 && (
         <div className="text-center py-16 text-gray-400">
           <ShoppingBag size={40} className="mx-auto mb-3 opacity-30" />
           <p className="font-medium">Shopping list is empty</p>
@@ -254,7 +353,6 @@ export default function ShoppingPage() {
       {storeOrder.filter((s) => grouped[s] && Object.keys(grouped[s]).length > 0).map((store) => (
         <div key={store} className="mb-4">
           <button onClick={() => toggleStore(store)} className="w-full flex items-center justify-between mb-2">
-            {/* Fix #5: store label is now text-sm, matching category labels */}
             <span className={cn("px-2.5 py-1 rounded-full text-sm font-semibold", getStoreColor(store))}>
               {getStoreLabel(store, userStores)}
             </span>
@@ -281,6 +379,13 @@ export default function ShoppingPage() {
                         <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
                       )}
                     </div>
+                    <button
+                      onClick={() => saveForLater(item)}
+                      className="text-gray-300 hover:text-amber-500 transition-colors p-1"
+                      title="Save for later"
+                    >
+                      <Bookmark size={13} />
+                    </button>
                     <button onClick={() => openEditModal(item)} className="text-gray-300 hover:text-indigo-500 transition-colors p-1">
                       <Pencil size={13} />
                     </button>
@@ -312,6 +417,36 @@ export default function ShoppingPage() {
                 <button onClick={() => handleDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors">
                   <X size={14} />
                 </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Save for Later section */}
+      {savedForLater.length > 0 && (
+        <div className="mt-8 border-t pt-5">
+          <p className="text-xs uppercase tracking-wide text-gray-400 font-medium mb-3">Saved for later ({savedForLater.length})</p>
+          <div className="space-y-2">
+            {savedForLater.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-2 py-1.5">
+                <div className="min-w-0">
+                  <span className="text-sm text-gray-500">{item.name}</span>
+                  {(item.quantity || item.unit) && (
+                    <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => openReAddModal(item)}
+                    className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+                  >
+                    <RotateCcw size={11} /> Re-add to list
+                  </button>
+                  <button onClick={() => handleDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors">
+                    <X size={13} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -392,6 +527,80 @@ export default function ShoppingPage() {
             <div className="flex gap-3">
               <button onClick={() => setEditModal(null)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
               <button onClick={confirmEdit} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Re-add to list modal */}
+      {reAddModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold text-lg">Re-add to list</h3>
+              <p className="text-gray-500 text-sm">{reAddModal.name}</p>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Qty</label>
+                <input type="number" value={reAddQty} onChange={(e) => setReAddQty(e.target.value)} placeholder="—"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Unit</label>
+                <UnitSelect value={reAddUnit} onChange={setReAddUnit} className="w-full" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Store</label>
+              <select value={reAddStore} onChange={(e) => setReAddStore(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                {Object.entries(allStoreLabels).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Category</label>
+              <select value={reAddCategory} onChange={(e) => setReAddCategory(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setReAddModal(null)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={confirmReAdd} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700">Add to list</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export modal */}
+      {showExport && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-lg">Export list</h3>
+              <button onClick={() => setShowExport(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+            <pre className="bg-gray-50 border rounded-xl p-3 text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto">
+              {exportText}
+            </pre>
+            <p className="text-xs text-gray-400">Saved-for-later items are not included.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCopy}
+                className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                {copied ? "Copied!" : "Copy text"}
+              </button>
+              <button
+                onClick={handleShare}
+                className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <Share2 size={14} /> Share
+              </button>
             </div>
           </div>
         </div>

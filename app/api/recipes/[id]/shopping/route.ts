@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { categorizeIngredients } from "@/lib/claude/extract";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 
-const BASIC_INGREDIENTS = [
-  "water", "salt", "pepper", "black pepper", "white pepper", "kosher salt",
-  "sea salt", "table salt", "fine salt", "coarse salt", "flaky salt",
-  "salt and pepper", "salt & pepper", "ground pepper", "freshly ground pepper",
-  "to taste", "ice", "ice water", "cold water", "boiling water",
-];
-
-function isBasicIngredient(name: string): boolean {
+function isBasicIngredient(name: string, skipList: string[]): boolean {
   const lower = name.toLowerCase().trim();
-  return BASIC_INGREDIENTS.some(
+  return skipList.some(
     (skip) => lower === skip || lower.startsWith(skip + " ") || lower.endsWith(" " + skip)
   );
 }
@@ -41,18 +35,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (error || !recipe) return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
 
-  // Fetch pantry and existing unchecked shopping items in parallel
-  const [{ data: pantryItems }, { data: existingItems }] = await Promise.all([
+  // Fetch pantry, existing unchecked shopping items, and user settings in parallel
+  const [{ data: pantryItems }, { data: existingItems }, { data: settingsRow }] = await Promise.all([
     supabase.from("pantry_items").select("*").eq("user_id", user.id),
     supabase.from("shopping_items").select("*").eq("user_id", user.id).eq("checked", false),
+    supabase.from("user_settings").select("settings").eq("user_id", user.id).single(),
   ]);
+
+  const skipIngredients: string[] = settingsRow?.settings?.skipIngredients ?? DEFAULT_SETTINGS.skipIngredients;
+  const storeDescriptions = settingsRow?.settings?.stores ?? DEFAULT_SETTINGS.stores;
 
   const toMerge: { existingId: string; addQty: number }[] = [];
   const toInsert: typeof recipe.recipe_ingredients = [];
 
   for (const ing of recipe.recipe_ingredients) {
     // Skip basic pantry staples (water, salt, pepper, etc.)
-    if (isBasicIngredient(ing.name)) continue;
+    if (isBasicIngredient(ing.name, skipIngredients)) continue;
 
     // Skip if pantry has it and it's well-stocked
     const pantryMatch = pantryItems?.find((p) => namesMatch(ing.name, p.name));
@@ -85,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Categorize and insert new items
   let inserted = 0;
   if (toInsert.length) {
-    const categorized = await categorizeIngredients(toInsert);
+    const categorized = await categorizeIngredients(toInsert, storeDescriptions);
     const rows = categorized.map((ing) => ({
       user_id: user.id,
       name: ing.name,

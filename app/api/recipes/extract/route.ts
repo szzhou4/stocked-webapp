@@ -23,15 +23,16 @@ export async function POST(request: NextRequest) {
     .eq("user_id", user.id)
     .single();
   const storeDescriptions = settingsRow?.settings?.stores ?? DEFAULT_SETTINGS.stores;
+  const skipIngredients: string[] = settingsRow?.settings?.skipIngredients ?? DEFAULT_SETTINGS.skipIngredients;
 
   try {
     let ingredients;
     if (url) {
-      ingredients = await extractIngredientsFromUrl(url);
+      ingredients = await extractIngredientsFromUrl(url, skipIngredients);
     } else if (imageBase64) {
-      ingredients = await extractIngredientsFromImage(imageBase64, imageMediaType || "image/jpeg");
+      ingredients = await extractIngredientsFromImage(imageBase64, imageMediaType || "image/jpeg", skipIngredients);
     } else if (text) {
-      ingredients = await extractIngredientsFromText(text);
+      ingredients = await extractIngredientsFromText(text, skipIngredients);
     } else {
       return NextResponse.json({ error: "Provide url, text, or imageBase64" }, { status: 400 });
     }

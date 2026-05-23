@@ -9,10 +9,14 @@ const SKIP_INGREDIENTS = [
   "to taste", "ice", "ice water", "cold water", "boiling water",
 ];
 
-function filterBasicIngredients(ingredients: ExtractedIngredient[]): ExtractedIngredient[] {
+function filterBasicIngredients(
+  ingredients: ExtractedIngredient[],
+  skipList?: string[]
+): ExtractedIngredient[] {
+  const list = skipList ?? SKIP_INGREDIENTS;
   return ingredients.filter((ing) => {
     const lower = ing.name.toLowerCase().trim();
-    return !SKIP_INGREDIENTS.some((skip) => lower === skip || lower.startsWith(skip + " ") || lower.endsWith(" " + skip));
+    return !list.some((skip) => lower === skip || lower.startsWith(skip + " ") || lower.endsWith(" " + skip));
   });
 }
 
@@ -39,7 +43,7 @@ function buildStoreString(storeDescriptions?: Record<string, { name: string; des
 
 const CATEGORIES = `produce, dairy, meat/seafood, grains/dry, canned/jarred, frozen, condiments/sauces, baking, beverages, snacks, other`;
 
-export async function extractIngredientsFromText(text: string): Promise<ExtractedIngredient[]> {
+export async function extractIngredientsFromText(text: string, skipIngredients?: string[]): Promise<ExtractedIngredient[]> {
   const message = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1024,
@@ -52,10 +56,10 @@ export async function extractIngredientsFromText(text: string): Promise<Extracte
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
-  return filterBasicIngredients(JSON.parse(jsonMatch[0]));
+  return filterBasicIngredients(JSON.parse(jsonMatch[0]), skipIngredients);
 }
 
-export async function extractIngredientsFromUrl(url: string): Promise<ExtractedIngredient[]> {
+export async function extractIngredientsFromUrl(url: string, skipIngredients?: string[]): Promise<ExtractedIngredient[]> {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; Stocked/1.0)" },
   });
@@ -68,10 +72,10 @@ export async function extractIngredientsFromUrl(url: string): Promise<ExtractedI
     .replace(/\s+/g, " ")
     .slice(0, 8000);
 
-  return extractIngredientsFromText(text);
+  return extractIngredientsFromText(text, skipIngredients);
 }
 
-export async function extractIngredientsFromImage(base64Image: string, mediaType: string): Promise<ExtractedIngredient[]> {
+export async function extractIngredientsFromImage(base64Image: string, mediaType: string, skipIngredients?: string[]): Promise<ExtractedIngredient[]> {
   const message = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1024,
@@ -93,7 +97,7 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
-  return filterBasicIngredients(JSON.parse(jsonMatch[0]));
+  return filterBasicIngredients(JSON.parse(jsonMatch[0]), skipIngredients);
 }
 
 export async function categorizeIngredients(

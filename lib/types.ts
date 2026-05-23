@@ -99,6 +99,7 @@ export type ShoppingItem = {
   purchased_unit: string | null;
   pantry_item_id: string | null;
   recipe_id: string | null;
+  saved_for_later: boolean;
   created_at: string;
 };
 

@@ -1,9 +1,12 @@
-import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
-import { Plus, ExternalLink, BookOpen, Utensils, CheckCircle2, AlertCircle } from "lucide-react";
-import type { Recipe, RecipeIngredient } from "@/lib/types";
+"use client";
 
-type PantryStub = { name: string; quantity: number };
+import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
+import { Plus, ExternalLink, BookOpen, Utensils, CheckCircle2, AlertCircle, Search, X } from "lucide-react";
+import type { Recipe, RecipeIngredient, PantryItem } from "@/lib/types";
+
+type RecipeWithIngredients = Recipe & { recipe_ingredients: RecipeIngredient[] };
+type PantryStub = Pick<PantryItem, "name" | "quantity">;
 
 function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[]): number {
   return ingredients.filter((ing) => {
@@ -15,20 +18,46 @@ function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[]):
   }).length;
 }
 
-export default async function RecipesPage() {
-  const supabase = await createClient();
-  const [{ data: recipesData }, { data: pantryData }] = await Promise.all([
-    supabase.from("recipes").select("*, recipe_ingredients(*)").order("created_at", { ascending: false }),
-    supabase.from("pantry_items").select("name, quantity, min_quantity, unit"),
-  ]);
+export default function RecipesPage() {
+  const [recipes, setRecipes] = useState<RecipeWithIngredients[]>([]);
+  const [pantry, setPantry] = useState<PantryStub[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
-  const recipes = (recipesData || []) as (Recipe & { recipe_ingredients: RecipeIngredient[] })[];
-  const pantry: PantryStub[] = pantryData || [];
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/recipes").then((r) => r.json()),
+      fetch("/api/pantry").then((r) => r.json()),
+    ]).then(([recipesData, pantryData]) => {
+      setRecipes(recipesData.recipes || []);
+      setPantry(pantryData.items || []);
+      setLoading(false);
+    });
+  }, []);
+
   const hasPantry = pantry.length > 0;
+
+  // Filter by search, then sort: ready first, then ascending missing count, then alphabetical
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = q
+      ? recipes.filter((r) => r.name.toLowerCase().includes(q))
+      : recipes;
+
+    return [...filtered].sort((a, b) => {
+      const aM = hasPantry ? getMissingCount(a.recipe_ingredients, pantry) : null;
+      const bM = hasPantry ? getMissingCount(b.recipe_ingredients, pantry) : null;
+      if (aM === null || bM === null) return a.name.localeCompare(b.name);
+      if (aM !== bM) return aM - bM; // ready (0) first
+      return a.name.localeCompare(b.name);
+    });
+  }, [recipes, pantry, search, hasPantry]);
+
+  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Recipes</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -43,6 +72,24 @@ export default async function RecipesPage() {
           Add
         </Link>
       </div>
+
+      {/* Search bar */}
+      {recipes.length > 0 && (
+        <div className="relative mb-5">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search recipes…"
+            className="w-full pl-9 pr-9 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {recipes.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-6 py-16 text-center">
@@ -61,9 +108,13 @@ export default async function RecipesPage() {
             Add your first recipe
           </Link>
         </div>
+      ) : displayed.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <p className="font-medium">No recipes match &ldquo;{search}&rdquo;</p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {recipes.map((recipe) => {
+          {displayed.map((recipe) => {
             const missingCount = hasPantry ? getMissingCount(recipe.recipe_ingredients, pantry) : null;
             const ready = missingCount === 0;
             return (

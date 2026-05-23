@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X, AlertTriangle, Minus } from "lucide-react";
+import { Plus, X, AlertTriangle, Minus, ShoppingCart } from "lucide-react";
 import type { PantryItem } from "@/lib/types";
 import { STORE_LABELS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
@@ -134,6 +134,20 @@ export default function PantryPage() {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
 
+  async function addToShoppingList(item: PantryItem) {
+    await fetch("/api/shopping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: item.name,
+        quantity: null,
+        unit: item.unit || null,
+        store: item.store,
+        category: item.category,
+      }),
+    });
+  }
+
   const grouped = items.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
@@ -245,7 +259,6 @@ export default function PantryPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      {isLow && <AlertTriangle size={14} className="text-amber-500" />}
                       {!isEditing && (
                         <button
                           onClick={() => setUseModal(item)}
@@ -311,19 +324,25 @@ export default function PantryPage() {
                       <p className="text-[11px] text-gray-400">Min triggers low-stock alert &amp; auto-adds to shopping list</p>
                     </div>
                   ) : (
-                    <div className="mt-1 flex items-center gap-2">
-                      {item.min_quantity > 0 ? (
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                          <div
-                            className={`h-1.5 rounded-full transition-all ${isLow ? "bg-amber-400" : "bg-indigo-500"}`}
-                            style={{ width: `${Math.min(100, (item.quantity / (item.min_quantity * 2)) * 100)}%` }}
-                          />
-                        </div>
-                      ) : <div className="flex-1" />}
-                      <span className="text-xs text-gray-500 shrink-0">
-                        {formatQuantity(item.quantity, item.unit)}
-                        {item.min_quantity > 0 && <span className="text-gray-300"> / {formatQuantity(item.min_quantity, item.unit)} min</span>}
-                      </span>
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        {isLow && (
+                          <span className="flex items-center gap-1 text-xs font-medium text-amber-600">
+                            <AlertTriangle size={12} /> Running low
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-500">
+                          {formatQuantity(item.quantity, item.unit)} on hand
+                        </span>
+                      </div>
+                      {isLow && (
+                        <button
+                          onClick={() => addToShoppingList(item)}
+                          className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-full transition-colors"
+                        >
+                          <ShoppingCart size={11} /> Add to list
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

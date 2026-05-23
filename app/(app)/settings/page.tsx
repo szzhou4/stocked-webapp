@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, RotateCcw, Plus, Trash2 } from "lucide-react";
+import { Loader2, Save, RotateCcw, Plus, Trash2, X } from "lucide-react";
 import { STORE_COLORS, DEFAULT_STORE_COLOR } from "@/lib/types";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
+  const [newSkipItem, setNewSkipItem] = useState("");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -48,6 +49,19 @@ export default function SettingsPage() {
       const { [key]: _, ...rest } = s.stores;
       return { ...s, stores: rest };
     });
+  }
+
+  function addSkipItem() {
+    const item = newSkipItem.trim().toLowerCase();
+    if (!item) return;
+    const current = settings.skipIngredients ?? [];
+    if (current.includes(item)) return;
+    setSettings((s) => ({ ...s, skipIngredients: [...(s.skipIngredients ?? []), item] }));
+    setNewSkipItem("");
+  }
+
+  function removeSkipItem(item: string) {
+    setSettings((s) => ({ ...s, skipIngredients: (s.skipIngredients ?? []).filter((i) => i !== item) }));
   }
 
   async function handleSave() {
@@ -184,6 +198,45 @@ export default function SettingsPage() {
           >
             <Plus size={14} /> Add
           </button>
+        </div>
+      </div>
+
+      {/* Filtered ingredients */}
+      <div className="mt-6">
+        <div className="mb-2">
+          <h2 className="font-semibold text-gray-800">Filtered ingredients</h2>
+          <p className="text-xs text-gray-500">These are automatically skipped when importing recipes or adding to your shopping list.</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4 space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {(settings.skipIngredients ?? []).map((item) => (
+              <span key={item} className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full">
+                {item}
+                <button onClick={() => removeSkipItem(item)} className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors">
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {(settings.skipIngredients ?? []).length === 0 && (
+              <span className="text-xs text-gray-400 italic">No items filtered</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newSkipItem}
+              onChange={(e) => setNewSkipItem(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addSkipItem()}
+              placeholder="e.g. olive oil, garlic…"
+              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={addSkipItem}
+              disabled={!newSkipItem.trim()}
+              className="flex items-center gap-1.5 bg-gray-100 text-gray-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-200 disabled:opacity-40 transition-colors"
+            >
+              <Plus size={14} /> Add
+            </button>
+          </div>
         </div>
       </div>
 
