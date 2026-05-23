@@ -1,28 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag } from "lucide-react";
-import type { ShoppingItem, Store } from "@/lib/types";
-import { STORE_LABELS, STORE_COLORS, CATEGORIES, UNITS } from "@/lib/types";
+import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag, Pencil } from "lucide-react";
+import type { ShoppingItem } from "@/lib/types";
+import { STORE_LABELS, STORE_COLORS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
-  type DragOverEvent,
-} from "@dnd-kit/core";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
-type GroupedItems = Record<Store, Record<string, ShoppingItem[]>>;
+type GroupedItems = Record<string, Record<string, ShoppingItem[]>>;
 
 function groupItems(items: ShoppingItem[]): GroupedItems {
-  const result = {} as GroupedItems;
+  const result: GroupedItems = {};
   for (const item of items) {
     if (!result[item.store]) result[item.store] = {};
     if (!result[item.store][item.category]) result[item.store][item.category] = [];
@@ -31,108 +20,56 @@ function groupItems(items: ShoppingItem[]): GroupedItems {
   return result;
 }
 
-const STORE_ORDER: Store[] = ["costco", "asian", "generic", "other"];
-
 function UnitSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const isCustom = value && !UNITS.includes(value as typeof UNITS[number]);
   return (
-    <select
-      value={UNITS.includes(value as typeof UNITS[number]) ? value : ""}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn("border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500", className)}
-    >
-      <option value="">unit</option>
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      className={cn("border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500", className)}>
+      <option value="">— unit —</option>
       {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-      {value && !UNITS.includes(value as typeof UNITS[number]) && (
-        <option value={value}>{value}</option>
-      )}
+      {isCustom && <option value={value}>{value}</option>}
     </select>
-  );
-}
-
-function DraggableItem({ item, onCheck, onDelete, disabled }: {
-  item: ShoppingItem;
-  onCheck: (item: ShoppingItem) => void;
-  onDelete: (id: string) => void;
-  disabled: boolean;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: item.id });
-  const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.4 : 1 } : undefined;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 bg-white border rounded-lg px-3 py-2.5 touch-none"
-    >
-      {/* Drag handle */}
-      <div
-        {...listeners}
-        {...attributes}
-        className="text-gray-200 cursor-grab active:cursor-grabbing shrink-0 px-0.5"
-        style={{ touchAction: "none" }}
-      >
-        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
-          <circle cx="3" cy="3" r="1.5"/><circle cx="7" cy="3" r="1.5"/>
-          <circle cx="3" cy="8" r="1.5"/><circle cx="7" cy="8" r="1.5"/>
-          <circle cx="3" cy="13" r="1.5"/><circle cx="7" cy="13" r="1.5"/>
-        </svg>
-      </div>
-      <button
-        onClick={() => onCheck(item)}
-        disabled={disabled}
-        className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 transition-colors shrink-0"
-      />
-      <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium">{item.name}</span>
-        {(item.quantity || item.unit) && (
-          <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
-        )}
-      </div>
-      <button onClick={() => onDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors">
-        <X size={14} />
-      </button>
-    </div>
-  );
-}
-
-function DroppableStore({ store, isOver, children }: { store: Store; isOver: boolean; children: React.ReactNode }) {
-  const { setNodeRef } = useDroppable({ id: `store:${store}` });
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "mb-4 rounded-xl transition-colors",
-        isOver && "bg-indigo-50 ring-2 ring-indigo-300"
-      )}
-    >
-      {children}
-    </div>
   );
 }
 
 export default function ShoppingPage() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [collapsedStores, setCollapsedStores] = useState<Set<string>>(new Set());
   const [checkingId, setCheckingId] = useState<string | null>(null);
+
+  // Purchase confirmation modal
   const [purchaseModal, setPurchaseModal] = useState<ShoppingItem | null>(null);
   const [purchaseName, setPurchaseName] = useState("");
   const [purchaseQty, setPurchaseQty] = useState("");
   const [purchaseUnit, setPurchaseUnit] = useState("");
-  const [addingManual, setAddingManual] = useState(false);
-  const [newItem, setNewItem] = useState({ name: "", quantity: "", unit: "", store: "generic" as Store, category: "other" });
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
-  );
+  // Edit modal
+  const [editModal, setEditModal] = useState<ShoppingItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editQty, setEditQty] = useState("");
+  const [editUnit, setEditUnit] = useState("");
+  const [editStore, setEditStore] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+
+  // Manual add form
+  const [addingManual, setAddingManual] = useState(false);
+  const [newItem, setNewItem] = useState({ name: "", quantity: "", unit: "", store: "generic", category: "other" });
+
+  const userStores = settings.stores;
+  const allStoreLabels = { ...STORE_LABELS, ...Object.fromEntries(Object.entries(userStores).map(([k, v]) => [k, v.name])) };
+  const storeOrder = Object.keys(allStoreLabels);
 
   async function load() {
-    const res = await fetch("/api/shopping");
-    const data = await res.json();
-    setItems(data.items || []);
+    const [shoppingRes, settingsRes] = await Promise.all([
+      fetch("/api/shopping"),
+      fetch("/api/settings"),
+    ]);
+    const shoppingData = await shoppingRes.json();
+    const settingsData = await settingsRes.json();
+    setItems(shoppingData.items || []);
+    if (settingsData.settings) setSettings(settingsData.settings);
     setLoading(false);
   }
 
@@ -146,43 +83,20 @@ export default function ShoppingPage() {
     });
   }
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string);
-  }
-
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    setActiveId(null);
-    setOverId(null);
-    if (!over) return;
-
-    const itemId = active.id as string;
-    const overId = over.id as string;
-    if (!overId.startsWith("store:")) return;
-
-    const targetStore = overId.replace("store:", "") as Store;
-    const item = items.find((i) => i.id === itemId);
-    if (!item || item.store === targetStore) return;
-
-    // Optimistic update
-    setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, store: targetStore } : i));
-
-    await fetch("/api/shopping", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: itemId, store: targetStore }),
-    });
-  }
-
-  function handleDragOver(event: DragOverEvent) {
-    setOverId(event.over ? String(event.over.id) : null);
-  }
-
-  async function handleCheck(item: ShoppingItem) {
+  function openPurchaseModal(item: ShoppingItem) {
     setPurchaseModal(item);
     setPurchaseName(item.name);
     setPurchaseQty(item.quantity?.toString() || "");
     setPurchaseUnit(item.unit || "");
+  }
+
+  function openEditModal(item: ShoppingItem) {
+    setEditModal(item);
+    setEditName(item.name);
+    setEditQty(item.quantity?.toString() || "");
+    setEditUnit(item.unit || "");
+    setEditStore(item.store);
+    setEditCategory(item.category);
   }
 
   async function confirmPurchase() {
@@ -202,6 +116,24 @@ export default function ShoppingPage() {
     await load();
     setCheckingId(null);
     setPurchaseModal(null);
+  }
+
+  async function confirmEdit() {
+    if (!editModal) return;
+    await fetch("/api/shopping", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editModal.id,
+        name: editName,
+        quantity: parseFloat(editQty) || null,
+        unit: editUnit || null,
+        store: editStore,
+        category: editCategory,
+      }),
+    });
+    await load();
+    setEditModal(null);
   }
 
   async function handleUncheck(item: ShoppingItem) {
@@ -233,14 +165,13 @@ export default function ShoppingPage() {
     });
     if (res.ok) {
       await load();
-      setNewItem({ name: "", quantity: "", unit: "", store: "generic", category: "other" });
+      setNewItem({ name: "", quantity: "", unit: "", store: settings.defaultStore || "generic", category: "other" });
       setAddingManual(false);
     }
   }
 
   async function clearChecked() {
-    const checked = items.filter((i) => i.checked);
-    await Promise.all(checked.map((i) =>
+    await Promise.all(items.filter((i) => i.checked).map((i) =>
       fetch("/api/shopping", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: i.id }) })
     ));
     await load();
@@ -249,7 +180,6 @@ export default function ShoppingPage() {
   const unchecked = items.filter((i) => !i.checked);
   const checked = items.filter((i) => i.checked);
   const grouped = groupItems(unchecked);
-  const activeItem = activeId ? items.find((i) => i.id === activeId) : null;
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
@@ -281,8 +211,7 @@ export default function ShoppingPage() {
       {addingManual && (
         <div className="bg-white border rounded-xl p-4 mb-4 space-y-3">
           <input
-            placeholder="Item name"
-            value={newItem.name}
+            placeholder="Item name" value={newItem.name}
             onChange={(e) => setNewItem((p) => ({ ...p, name: e.target.value }))}
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
@@ -293,26 +222,20 @@ export default function ShoppingPage() {
               className="w-20 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
             <UnitSelect value={newItem.unit} onChange={(v) => setNewItem((p) => ({ ...p, unit: v }))} className="flex-1" />
-            <select
-              value={newItem.store}
-              onChange={(e) => setNewItem((p) => ({ ...p, store: e.target.value as Store }))}
-              className="flex-1 border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              {Object.entries(STORE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            <select value={newItem.store} onChange={(e) => setNewItem((p) => ({ ...p, store: e.target.value }))}
+              className="flex-1 border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+              {Object.entries(allStoreLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <select
-            value={newItem.category}
-            onChange={(e) => setNewItem((p) => ({ ...p, category: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
+          <select value={newItem.category} onChange={(e) => setNewItem((p) => ({ ...p, category: e.target.value }))}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <div className="flex gap-2">
             <button onClick={handleAddManual} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 transition-colors">
               Add item
             </button>
-            <button onClick={() => setAddingManual(false)} className="px-3 py-2 text-gray-400 hover:text-gray-600 transition-colors">
+            <button onClick={() => setAddingManual(false)} className="px-3 py-2 text-gray-400 hover:text-gray-600">
               <X size={16} />
             </button>
           </div>
@@ -327,59 +250,50 @@ export default function ShoppingPage() {
         </div>
       )}
 
-      {unchecked.length > 0 && (
-        <p className="text-xs text-gray-400 mb-3">Drag items between store sections to reassign them</p>
-      )}
+      {/* Grouped by store */}
+      {storeOrder.filter((s) => grouped[s] && Object.keys(grouped[s]).length > 0).map((store) => (
+        <div key={store} className="mb-4">
+          <button onClick={() => toggleStore(store)} className="w-full flex items-center justify-between mb-2">
+            {/* Fix #5: store label is now text-sm, matching category labels */}
+            <span className={cn("px-2.5 py-1 rounded-full text-sm font-semibold", getStoreColor(store))}>
+              {getStoreLabel(store, userStores)}
+            </span>
+            {collapsedStores.has(store)
+              ? <ChevronDown size={16} className="text-gray-400" />
+              : <ChevronUp size={16} className="text-gray-400" />
+            }
+          </button>
 
-      {/* Drag and drop context */}
-      <DndContext
-        sensors={sensors}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-      >
-        {STORE_ORDER.filter((s) => grouped[s] && Object.keys(grouped[s]).length > 0).map((store) => (
-          <DroppableStore key={store} store={store} isOver={overId === `store:${store}`}>
-            <button
-              onClick={() => toggleStore(store)}
-              className="w-full flex items-center justify-between mb-2 px-1"
-            >
-              <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", STORE_COLORS[store])}>
-                {STORE_LABELS[store]}
-              </span>
-              {collapsedStores.has(store) ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronUp size={16} className="text-gray-400" />}
-            </button>
-
-            {!collapsedStores.has(store) && Object.entries(grouped[store]).map(([category, catItems]) => (
-              <div key={category} className="mb-3">
-                <p className="text-xs uppercase tracking-wide text-gray-400 font-medium mb-1.5 ml-1">{category}</p>
-                <div className="space-y-1.5">
-                  {catItems.map((item) => (
-                    <DraggableItem
-                      key={item.id}
-                      item={item}
-                      onCheck={handleCheck}
-                      onDelete={handleDelete}
+          {!collapsedStores.has(store) && Object.entries(grouped[store]).map(([category, catItems]) => (
+            <div key={category} className="mb-3">
+              <p className="text-xs uppercase tracking-wide text-gray-400 font-medium mb-1.5 ml-1">{category}</p>
+              <div className="space-y-1.5">
+                {catItems.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 bg-white border rounded-lg px-3 py-2.5">
+                    <button
+                      onClick={() => openPurchaseModal(item)}
                       disabled={checkingId === item.id}
+                      className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 transition-colors shrink-0"
                     />
-                  ))}
-                </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{item.name}</span>
+                      {(item.quantity || item.unit) && (
+                        <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
+                      )}
+                    </div>
+                    <button onClick={() => openEditModal(item)} className="text-gray-300 hover:text-indigo-500 transition-colors p-1">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => handleDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors p-1">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </DroppableStore>
-        ))}
-
-        <DragOverlay>
-          {activeItem && (
-            <div className="flex items-center gap-3 bg-white border-2 border-indigo-400 rounded-lg px-3 py-2.5 shadow-lg opacity-90">
-              <span className="text-sm font-medium">{activeItem.name}</span>
-              {(activeItem.quantity || activeItem.unit) && (
-                <span className="text-xs text-gray-400">{formatQuantity(activeItem.quantity, activeItem.unit)}</span>
-              )}
             </div>
-          )}
-        </DragOverlay>
-      </DndContext>
+          ))}
+        </div>
+      ))}
 
       {/* Checked items */}
       {checked.length > 0 && (
@@ -404,7 +318,7 @@ export default function ShoppingPage() {
         </div>
       )}
 
-      {/* Purchase modal */}
+      {/* Purchase confirmation modal */}
       {purchaseModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
@@ -414,9 +328,7 @@ export default function ShoppingPage() {
             </div>
             <div>
               <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Item name</label>
-              <input
-                value={purchaseName}
-                onChange={(e) => setPurchaseName(e.target.value)}
+              <input value={purchaseName} onChange={(e) => setPurchaseName(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               {purchaseName !== purchaseModal.name && (
@@ -426,21 +338,60 @@ export default function ShoppingPage() {
             <div>
               <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Amount purchased</label>
               <div className="flex gap-3">
-                <input
-                  type="number" value={purchaseQty} onChange={(e) => setPurchaseQty(e.target.value)}
-                  placeholder="Qty"
+                <input type="number" value={purchaseQty} onChange={(e) => setPurchaseQty(e.target.value)} placeholder="Qty"
                   className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <UnitSelect value={purchaseUnit} onChange={setPurchaseUnit} className="w-28" />
               </div>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setPurchaseModal(null)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button onClick={confirmPurchase} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors">
-                Confirm
-              </button>
+              <button onClick={() => setPurchaseModal(null)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={confirmPurchase} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit item modal */}
+      {editModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="font-semibold text-lg">Edit item</h3>
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Name</label>
+              <input value={editName} onChange={(e) => setEditName(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Qty</label>
+                <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Unit</label>
+                <UnitSelect value={editUnit} onChange={setEditUnit} className="w-full" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Store</label>
+              <select value={editStore} onChange={(e) => setEditStore(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                {Object.entries(allStoreLabels).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Category</label>
+              <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setEditModal(null)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={confirmEdit} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700">Save</button>
             </div>
           </div>
         </div>

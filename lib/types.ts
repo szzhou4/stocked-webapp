@@ -1,18 +1,29 @@
-export type Store = "costco" | "asian" | "generic" | "other";
+// Store is now a flexible string — default keys: costco, asian, generic, other
+export type Store = string;
 
-export const STORE_LABELS: Record<Store, string> = {
+export const STORE_LABELS: Record<string, string> = {
   costco: "Costco",
   asian: "Asian (HMart/Ranch99)",
   generic: "Generic (Supermarket)",
   other: "Other",
 };
 
-export const STORE_COLORS: Record<Store, string> = {
+export const STORE_COLORS: Record<string, string> = {
   costco: "bg-blue-100 text-blue-800",
   asian: "bg-red-100 text-red-800",
   generic: "bg-green-100 text-green-800",
   other: "bg-gray-100 text-gray-800",
 };
+
+export const DEFAULT_STORE_COLOR = "bg-purple-100 text-purple-800";
+
+export function getStoreLabel(store: string, userStores?: Record<string, { name: string }>): string {
+  return userStores?.[store]?.name ?? STORE_LABELS[store] ?? store;
+}
+
+export function getStoreColor(store: string): string {
+  return STORE_COLORS[store] ?? DEFAULT_STORE_COLOR;
+}
 
 export const UNITS = [
   "cups", "tbsp", "tsp",

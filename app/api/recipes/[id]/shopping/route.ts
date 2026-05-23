@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { categorizeIngredients } from "@/lib/claude/extract";
 
+const BASIC_INGREDIENTS = [
+  "water", "salt", "pepper", "black pepper", "white pepper", "kosher salt",
+  "sea salt", "table salt", "fine salt", "coarse salt", "flaky salt",
+  "salt and pepper", "salt & pepper", "ground pepper", "freshly ground pepper",
+  "to taste", "ice", "ice water", "cold water", "boiling water",
+];
+
+function isBasicIngredient(name: string): boolean {
+  const lower = name.toLowerCase().trim();
+  return BASIC_INGREDIENTS.some(
+    (skip) => lower === skip || lower.startsWith(skip + " ") || lower.endsWith(" " + skip)
+  );
+}
+
 function namesMatch(a: string, b: string): boolean {
   const al = a.toLowerCase(), bl = b.toLowerCase();
   return al.includes(bl) || bl.includes(al);
@@ -37,6 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const toInsert: typeof recipe.recipe_ingredients = [];
 
   for (const ing of recipe.recipe_ingredients) {
+    // Skip basic pantry staples (water, salt, pepper, etc.)
+    if (isBasicIngredient(ing.name)) continue;
+
     // Skip if pantry has it and it's well-stocked
     const pantryMatch = pantryItems?.find((p) => namesMatch(ing.name, p.name));
     if (pantryMatch && pantryMatch.quantity > pantryMatch.min_quantity) continue;
