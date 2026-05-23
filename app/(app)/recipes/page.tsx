@@ -6,10 +6,11 @@ import { Plus, ExternalLink, BookOpen, CheckCircle2, AlertCircle, Search, X, Arc
 import { getRecipeIcon } from "@/lib/recipeIcons";
 import type { Recipe, RecipeIngredient, PantryItem } from "@/lib/types";
 import { isSkippedIngredient } from "@/lib/utils";
+import { convertWithIngredient } from "@/lib/units";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 type RecipeWithIngredients = Recipe & { recipe_ingredients: RecipeIngredient[] };
-type PantryStub = Pick<PantryItem, "name" | "quantity">;
+type PantryStub = Pick<PantryItem, "name" | "quantity" | "unit">;
 
 function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[], skipList: string[]): number {
   return ingredients.filter((ing) => {
@@ -18,7 +19,14 @@ function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[], 
     const match = pantry.find(
       (p) => p.name.toLowerCase().includes(ingLower) || ingLower.includes(p.name.toLowerCase())
     );
-    return !match || match.quantity <= 0;
+    if (!match || match.quantity <= 0) return true; // not in pantry
+    if (ing.quantity != null && ing.quantity > 0) {
+      const needed = ing.quantity;
+      const neededInPantryUnits = convertWithIngredient(needed, ing.unit, match.unit, ing.name);
+      if (neededInPantryUnits !== null && match.quantity < neededInPantryUnits) return true;
+      if (neededInPantryUnits !== null) return false; // pantry covers it
+    }
+    return false; // exists in pantry, quantity unknown or conversion not possible
   }).length;
 }
 

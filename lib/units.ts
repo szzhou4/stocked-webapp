@@ -1,3 +1,5 @@
+import { lookupDensity } from "./ingredientDensities";
+
 export type UnitFamily = "volume" | "weight" | "count" | "other";
 
 /**
@@ -100,6 +102,101 @@ export function convertUnit(
 
   if (fromFamily === "volume") return (qty * TO_ML[from]) / TO_ML[to];
   if (fromFamily === "weight") return (qty * TO_G[from]) / TO_G[to];
+  return null;
+}
+
+/**
+ * Like convertUnit but also handles cross-family conversions (volume↔weight,
+ * count↔weight, count↔volume) by looking up ingredient-specific densities.
+ *
+ * Treats a null/empty unit as a count (unitless items).
+ * Returns null when no conversion path exists — callers should fall back to
+ * an existence check rather than reporting the item as missing.
+ */
+export function convertWithIngredient(
+  qty: number,
+  fromUnit: string | null | undefined,
+  toUnit: string | null | undefined,
+  ingredientName: string,
+): number | null {
+  const from = fromUnit ? (normalizeUnit(fromUnit) ?? fromUnit).toLowerCase().trim() : "";
+  const to   = toUnit   ? (normalizeUnit(toUnit)   ?? toUnit).toLowerCase().trim()   : "";
+
+  // Same unit (including both null/empty → count ↔ count)
+  if (from === to) return qty;
+
+  // Try same-family conversion first (handles cup→tbsp, g→oz, etc.)
+  const direct = convertUnit(qty, from || null, to || null);
+  if (direct !== null) return direct;
+
+  // Need a density entry for cross-family conversions
+  const density = lookupDensity(ingredientName);
+  if (!density) return null;
+
+  // Treat empty string as "count" family for cross-family logic
+  const fromFam = from ? getUnitFamily(from) : "count";
+  const toFam   = to   ? getUnitFamily(to)   : "count";
+
+  // Bail on unrecognised units (e.g. "pinch", "dash")
+  if (fromFam === "other" || toFam === "other") return null;
+  // Same family but couldn't convert above → unsupported pairing
+  if (fromFam === toFam) return null;
+
+  // Helper: qty in fromUnit → millilitres
+  const toMl = (q: number, u: string): number | null =>
+    u in TO_ML ? q * TO_ML[u] : null;
+
+  // Helper: qty in fromUnit → grams
+  const toG = (q: number, u: string): number | null =>
+    u in TO_G ? q * TO_G[u] : null;
+
+  // Helper: grams → toUnit
+  const fromG = (g: number, u: string): number | null =>
+    u in TO_G ? g / TO_G[u] : u === "g" ? g : null;
+
+  // Helper: millilitres → toUnit
+  const fromMl = (ml: number, u: string): number | null =>
+    u in TO_ML ? ml / TO_ML[u] : u === "ml" ? ml : null;
+
+  // ── Volume ↔ Weight ────────────────────────────────────────────────────
+  if (fromFam === "volume" && toFam === "weight" && density.gPerCup) {
+    const ml = toMl(qty, from);
+    if (ml === null) return null;
+    const grams = (ml / 240) * density.gPerCup;
+    return fromG(grams, to || "g");
+  }
+
+  if (fromFam === "weight" && toFam === "volume" && density.gPerCup) {
+    const grams = toG(qty, from);
+    if (grams === null) return null;
+    const ml = (grams / density.gPerCup) * 240;
+    return fromMl(ml, to || "ml");
+  }
+
+  // ── Count ↔ Weight ─────────────────────────────────────────────────────
+  if (fromFam === "count" && toFam === "weight" && density.gPerUnit) {
+    const grams = qty * density.gPerUnit;
+    return fromG(grams, to || "g");
+  }
+
+  if (fromFam === "weight" && toFam === "count" && density.gPerUnit) {
+    const grams = toG(qty, from);
+    if (grams === null) return null;
+    return grams / density.gPerUnit;
+  }
+
+  // ── Count ↔ Volume ─────────────────────────────────────────────────────
+  if (fromFam === "count" && toFam === "volume" && density.mlPerUnit) {
+    const ml = qty * density.mlPerUnit;
+    return fromMl(ml, to || "ml");
+  }
+
+  if (fromFam === "volume" && toFam === "count" && density.mlPerUnit) {
+    const ml = toMl(qty, from);
+    if (ml === null) return null;
+    return ml / density.mlPerUnit;
+  }
+
   return null;
 }
 

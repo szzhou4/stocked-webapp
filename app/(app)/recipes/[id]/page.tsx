@@ -13,7 +13,7 @@ import { UnitSelect } from "@/components/UnitSelect";
 import { formatQuantity, isSkippedIngredient } from "@/lib/utils";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 import { RECIPE_ICONS, getRecipeIcon } from "@/lib/recipeIcons";
-import { convertUnit } from "@/lib/units";
+import { convertWithIngredient } from "@/lib/units";
 
 type EditableIngredient = {
   id?: string;
@@ -40,21 +40,14 @@ function computeMissing(
     // If recipe has a quantity, check whether pantry holds enough for the scaled serving
     if (ing.quantity != null && ing.quantity > 0) {
       const needed = ing.quantity * scale;
-      const ingUnit = (ing.unit ?? "").toLowerCase().trim();
-      const pantryUnit = (match.unit ?? "").toLowerCase().trim();
-
-      if (ingUnit === pantryUnit) {
-        // Same unit — direct comparison
-        if (match.quantity < needed) return true;
-      } else if (ingUnit && pantryUnit) {
-        // Different units — try conversion
-        const neededConverted = convertUnit(needed, ingUnit, pantryUnit);
-        if (neededConverted !== null && match.quantity < neededConverted) return true;
-      } else if (!ingUnit && !pantryUnit) {
-        // Both unitless (count) — direct comparison
-        if (match.quantity < needed) return true;
-      }
-      // Mixed unit presence → existence check only (can't compare)
+      // convertWithIngredient handles same-unit, same-family, and cross-family
+      // (volume↔weight, count↔weight, count↔volume) via density lookup.
+      // Returns null only when no conversion path exists → fall through to
+      // existence check (item is in pantry, we just can't compare quantities).
+      const neededInPantryUnits = convertWithIngredient(needed, ing.unit, match.unit, ing.name);
+      if (neededInPantryUnits !== null && match.quantity < neededInPantryUnits) return true;
+      if (neededInPantryUnits !== null) return false; // pantry covers it
+      // else: no conversion possible → existence check (fall through to return false)
     }
 
     return false;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { categorizeIngredients } from "@/lib/claude/extract";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
-import { convertUnit } from "@/lib/units";
+import { convertWithIngredient, convertUnit } from "@/lib/units";
 
 function isBasicIngredient(name: string, skipList: string[]): boolean {
   const lower = name.toLowerCase().trim();
@@ -16,9 +16,9 @@ function namesMatch(a: string, b: string): boolean {
   return al.includes(bl) || bl.includes(al);
 }
 
-/** Mirror of client-side computeMissing: returns true if pantry doesn't cover the scaled need */
+/** Mirror of client-side computeMissing: returns true if pantry covers the scaled need */
 function pantryCoversIngredient(
-  ing: { quantity: number | null; unit: string | null },
+  ing: { name: string; quantity: number | null; unit: string | null },
   pantry: { quantity: number; unit: string | null; min_quantity: number },
   scale: number,
 ): boolean {
@@ -26,18 +26,9 @@ function pantryCoversIngredient(
 
   if (ing.quantity != null && ing.quantity > 0) {
     const needed = ing.quantity * scale;
-    const ingUnit = (ing.unit ?? "").toLowerCase().trim();
-    const pantryUnit = (pantry.unit ?? "").toLowerCase().trim();
-
-    if (ingUnit === pantryUnit) {
-      return pantry.quantity >= needed;
-    } else if (ingUnit && pantryUnit) {
-      const neededConverted = convertUnit(needed, ingUnit, pantryUnit);
-      return neededConverted !== null && pantry.quantity >= neededConverted;
-    } else if (!ingUnit && !pantryUnit) {
-      return pantry.quantity >= needed;
-    }
-    // Mixed unit presence → fall back to existence + min_quantity check
+    const neededInPantryUnits = convertWithIngredient(needed, ing.unit, pantry.unit, ing.name);
+    if (neededInPantryUnits !== null) return pantry.quantity >= neededInPantryUnits;
+    // No conversion path → fall back to existence + min_quantity check
     return pantry.quantity > pantry.min_quantity;
   }
 
