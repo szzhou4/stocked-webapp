@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, RotateCcw, Plus, Trash2, X } from "lucide-react";
+import { Loader2, Save, RotateCcw, Plus, Trash2, X, Tag } from "lucide-react";
 import { STORE_COLORS, DEFAULT_STORE_COLOR } from "@/lib/types";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
   const [newSkipItem, setNewSkipItem] = useState("");
+  const [newTag, setNewTag] = useState("");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -62,6 +63,19 @@ export default function SettingsPage() {
 
   function removeSkipItem(item: string) {
     setSettings((s) => ({ ...s, skipIngredients: (s.skipIngredients ?? []).filter((i) => i !== item) }));
+  }
+
+  function addTag() {
+    const tag = newTag.trim();
+    if (!tag) return;
+    const current = settings.recipeTags ?? [];
+    if (current.includes(tag)) return;
+    setSettings((s) => ({ ...s, recipeTags: [...(s.recipeTags ?? []), tag] }));
+    setNewTag("");
+  }
+
+  function removeTag(tag: string) {
+    setSettings((s) => ({ ...s, recipeTags: (s.recipeTags ?? []).filter((t) => t !== tag) }));
   }
 
   async function handleSave() {
@@ -233,6 +247,45 @@ export default function SettingsPage() {
               onClick={addSkipItem}
               disabled={!newSkipItem.trim()}
               className="flex items-center gap-1.5 bg-gray-100 text-gray-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-200 disabled:opacity-40 transition-colors"
+            >
+              <Plus size={14} /> Add
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Recipe tags */}
+      <div className="mt-6">
+        <div className="mb-2">
+          <h2 className="font-semibold text-gray-800 flex items-center gap-1.5"><Tag size={15} /> Recipe tags</h2>
+          <p className="text-xs text-gray-500">Tags you can apply to recipes. Remove or add your own.</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4 space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {(settings.recipeTags ?? []).map((tag) => (
+              <span key={tag} className="flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-full border border-indigo-100">
+                {tag}
+                <button onClick={() => removeTag(tag)} className="ml-0.5 text-indigo-300 hover:text-red-500 transition-colors">
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {(settings.recipeTags ?? []).length === 0 && (
+              <span className="text-xs text-gray-400 italic">No tags defined</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addTag()}
+              placeholder="e.g. Thai, Slow Cooker, High Protein…"
+              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={addTag}
+              disabled={!newTag.trim()}
+              className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-indigo-100 disabled:opacity-40 transition-colors"
             >
               <Plus size={14} /> Add
             </button>

@@ -57,6 +57,9 @@ export type Recipe = {
   name: string;
   source_url: string | null;
   image_url: string | null;
+  source_type: "url" | "image" | "text" | null;
+  source_content: string | null;
+  tags: string[];
   servings: number;
   notes: string | null;
   created_at: string;
@@ -109,5 +112,6 @@ export type RecipeUse = {
   recipe_id: string;
   servings_made: number;
   original_servings: number;
+  notes: string | null;
   used_at: string;
 };

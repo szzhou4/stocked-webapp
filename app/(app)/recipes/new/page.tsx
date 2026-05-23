@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Link2, Camera, Type, Loader2, X } from "lucide-react";
+import { ArrowLeft, Link2, Camera, Type, Loader2, X, Tag } from "lucide-react";
 import Link from "next/link";
 import type { CategorizedIngredient } from "@/lib/claude/extract";
 import { STORE_LABELS } from "@/lib/types";
 import { UnitSelect } from "@/components/UnitSelect";
+import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
 type Mode = "url" | "image" | "text";
 
@@ -26,6 +27,16 @@ export default function NewRecipePage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageMediaType, setImageMediaType] = useState<string>("image/jpeg");
+
+  // Tags
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>(DEFAULT_SETTINGS.recipeTags);
+
+  useEffect(() => {
+    fetch("/api/settings").then((r) => r.json()).then((d: { settings?: UserSettings }) => {
+      if (d.settings?.recipeTags?.length) setAvailableTags(d.settings.recipeTags);
+    });
+  }, []);
 
   async function handleExtract() {
     setExtracting(true);
@@ -68,7 +79,6 @@ export default function NewRecipePage() {
       setError("Image too large (max 20 MB). Please use a smaller photo.");
       return;
     }
-    // Convert any format (including HEIC from iPhone) to JPEG via canvas
     const objectUrl = URL.createObjectURL(file);
     const img = document.createElement("img");
     img.onload = () => {
@@ -100,18 +110,41 @@ export default function NewRecipePage() {
     setIngredients((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  function toggleTag(tag: string) {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }
+
   async function handleSave() {
     if (!name.trim()) { setError("Recipe name is required"); return; }
     if (!ingredients.length) { setError("Add at least one ingredient"); return; }
     setSaving(true);
     setError("");
     try {
+      // Determine source type and content
+      let source_type: string | null = null;
+      let source_content: string | null = null;
+      if (mode === "url" && url) {
+        source_type = "url";
+        // source_url already captures the URL; no separate content needed
+      } else if (mode === "image" && imagePreview) {
+        source_type = "image";
+        source_content = imagePreview; // full data URL
+      } else if (mode === "text" && text.trim()) {
+        source_type = "text";
+        source_content = text.trim();
+      }
+
       const res = await fetch("/api/recipes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
           source_url: mode === "url" ? url : null,
+          source_type,
+          source_content,
+          tags: selectedTags,
           servings,
           ingredients,
         }),
@@ -227,6 +260,29 @@ export default function NewRecipePage() {
             </div>
           </div>
 
+          {/* Tags */}
+          <div>
+            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+              <Tag size={14} className="text-gray-400" /> Tags <span className="text-gray-400 font-normal text-xs">(optional)</span>
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {availableTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTag(tag)}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    selectedTags.includes(tag)
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <h2 className="text-sm font-semibold text-gray-700 mb-2">
               Ingredients ({ingredients.length}) — review &amp; edit
@@ -239,9 +295,9 @@ export default function NewRecipePage() {
                       <input
                         value={ing.name}
                         onChange={(e) => updateIngredient(i, "name", e.target.value)}
-                        className="w-full text-sm font-medium border-b border-transparent hover:border-gray-200 focus:border-indigo-400 focus:outline-none pb-0.5 mb-1"
+                        className="w-full text-sm font-medium border-b border-transparent hover:border-gray-200 focus:border-indigo-400 focus:outline-none pb-0.5 mb-1.5"
                       />
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 mb-1.5">
                         <input
                           value={ing.quantity ?? ""}
                           onChange={(e) => updateIngredient(i, "quantity", parseFloat(e.target.value) || 0)}
@@ -265,6 +321,13 @@ export default function NewRecipePage() {
                           ))}
                         </select>
                       </div>
+                      {/* Notes / about */}
+                      <input
+                        value={ing.notes ?? ""}
+                        onChange={(e) => updateIngredient(i, "notes", e.target.value || null)}
+                        placeholder="notes, e.g. chopped · 1 can (14 oz)"
+                        className="w-full text-xs border rounded px-2 py-1 text-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      />
                     </div>
                     <button
                       onClick={() => removeIngredient(i)}

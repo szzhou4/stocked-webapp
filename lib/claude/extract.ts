@@ -50,7 +50,7 @@ export async function extractIngredientsFromText(text: string, skipIngredients?:
     max_tokens: 1024,
     messages: [{
       role: "user",
-      content: `Extract all ingredients from this recipe text. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null, e.g. "cups", "tbsp", "lbs", "g", or null if no unit), notes (string or null, e.g. "chopped", "room temperature"). Omit basic pantry staples that every kitchen has: water, salt, pepper, and their common variations (kosher salt, black pepper, etc.). Only return the JSON array, no other text.\n\nRecipe text:\n${text}`,
+      content: `Extract all ingredients from this recipe text. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null, use short forms: "cups", "tbsp", "tsp", "oz", "lbs", "g", "kg", "ml", "cloves", "cans", "slices", or null if no unit), notes (string or null — include preparation notes like "chopped" or "room temperature", AND packaging context like "1 can", "1 block (14 oz)", "about 3 medium"). Omit basic pantry staples that every kitchen has: water, salt, pepper, and their common variations (kosher salt, black pepper, etc.). Only return the JSON array, no other text.\n\nRecipe text:\n${text}`,
     }],
   });
 
@@ -93,7 +93,7 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
         },
         {
           type: "text",
-          text: `Extract all ingredients from this recipe image. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null), notes (string or null). Omit basic pantry staples: water, salt, pepper, and their variations. Only return the JSON array, no other text.`,
+          text: `Extract all ingredients from this recipe image. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null, use short forms: "cups", "tbsp", "tsp", "oz", "lbs", "g", "kg", "ml", "cloves", "cans", "slices", or null), notes (string or null — include prep notes like "chopped" AND packaging context like "1 can", "1 block (14 oz)", "about 3 medium"). Omit basic pantry staples: water, salt, pepper, and their variations. Only return the JSON array, no other text.`,
         },
       ],
     }],

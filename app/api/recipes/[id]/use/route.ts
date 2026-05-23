@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { servings_made } = await request.json();
+  const { servings_made, notes: cookNotes } = await request.json();
 
   // Fetch recipe with ingredients
   const { data: recipe, error: recipeError } = await supabase
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     recipe_id: id,
     servings_made,
     original_servings: recipe.servings,
+    notes: cookNotes ?? null,
   });
 
   // Fetch all pantry items for this user

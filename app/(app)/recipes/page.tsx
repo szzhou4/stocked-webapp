@@ -12,7 +12,7 @@ type PantryStub = Pick<PantryItem, "name" | "quantity">;
 
 function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[], skipList: string[]): number {
   return ingredients.filter((ing) => {
-    if (isSkippedIngredient(ing.name, skipList)) return false; // never count as missing
+    if (isSkippedIngredient(ing.name, skipList)) return false;
     const ingLower = ing.name.toLowerCase();
     const match = pantry.find(
       (p) => p.name.toLowerCase().includes(ingLower) || ingLower.includes(p.name.toLowerCase())
@@ -25,8 +25,10 @@ export default function RecipesPage() {
   const [recipes, setRecipes] = useState<RecipeWithIngredients[]>([]);
   const [pantry, setPantry] = useState<PantryStub[]>([]);
   const [skipList, setSkipList] = useState<string[]>(DEFAULT_SETTINGS.skipIngredients);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -37,27 +39,40 @@ export default function RecipesPage() {
       setRecipes(recipesData.recipes || []);
       setPantry(pantryData.items || []);
       if (settingsData.settings?.skipIngredients) setSkipList(settingsData.settings.skipIngredients);
+      if (settingsData.settings?.recipeTags?.length) setAvailableTags(settingsData.settings.recipeTags);
       setLoading(false);
     });
   }, []);
 
   const hasPantry = pantry.length > 0;
 
-  // Filter by search, then sort: ready first, then ascending missing count, then alphabetical
+  // Tags that appear on at least one saved recipe (for the filter chips row)
+  const usedTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    recipes.forEach((r) => (r.tags ?? []).forEach((t) => tagSet.add(t)));
+    // Preserve the settings order so the row is stable
+    return availableTags.filter((t) => tagSet.has(t));
+  }, [recipes, availableTags]);
+
   const displayed = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const filtered = q
-      ? recipes.filter((r) => r.name.toLowerCase().includes(q))
-      : recipes;
+
+    const filtered = recipes.filter((r) => {
+      const matchesSearch = !q
+        || r.name.toLowerCase().includes(q)
+        || (r.tags ?? []).some((t) => t.toLowerCase().includes(q));
+      const matchesTag = !activeTag || (r.tags ?? []).includes(activeTag);
+      return matchesSearch && matchesTag;
+    });
 
     return [...filtered].sort((a, b) => {
       const aM = hasPantry ? getMissingCount(a.recipe_ingredients, pantry, skipList) : null;
       const bM = hasPantry ? getMissingCount(b.recipe_ingredients, pantry, skipList) : null;
       if (aM === null || bM === null) return a.name.localeCompare(b.name);
-      if (aM !== bM) return aM - bM; // ready (0) first
+      if (aM !== bM) return aM - bM;
       return a.name.localeCompare(b.name);
     });
-  }, [recipes, pantry, search, hasPantry]);
+  }, [recipes, pantry, search, activeTag, hasPantry, skipList]);
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
@@ -81,12 +96,12 @@ export default function RecipesPage() {
 
       {/* Search bar */}
       {recipes.length > 0 && (
-        <div className="relative mb-5">
+        <div className="relative mb-3">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search recipes…"
+            placeholder="Search recipes or tags…"
             className="w-full pl-9 pr-9 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
           />
           {search && (
@@ -94,6 +109,25 @@ export default function RecipesPage() {
               <X size={14} />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Tag filter chips — only shown when at least one recipe has tags */}
+      {usedTags.length > 0 && (
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-0.5 -mx-4 px-4">
+          {usedTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              className={`shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                activeTag === tag
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
         </div>
       )}
 
@@ -116,7 +150,19 @@ export default function RecipesPage() {
         </div>
       ) : displayed.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          <p className="font-medium">No recipes match &ldquo;{search}&rdquo;</p>
+          <p className="font-medium">
+            {activeTag
+              ? `No recipes tagged "${activeTag}"${search ? ` matching "${search}"` : ""}`
+              : `No recipes match "${search}"`}
+          </p>
+          {(activeTag || search) && (
+            <button
+              onClick={() => { setSearch(""); setActiveTag(null); }}
+              className="mt-2 text-sm text-indigo-500 hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -134,7 +180,14 @@ export default function RecipesPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="font-semibold text-gray-900 truncate">{recipe.name}</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">{recipe.servings} servings</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-xs text-gray-500">{recipe.servings} servings</span>
+                    {(recipe.tags ?? []).slice(0, 3).map((tag) => (
+                      <span key={tag} className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {hasPantry && missingCount !== null && (

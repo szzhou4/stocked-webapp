@@ -5,12 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, ShoppingCart, ChefHat, ExternalLink, Trash2, Loader2,
-  CheckCircle2, AlertCircle, Pencil, Plus, X, Check,
+  CheckCircle2, AlertCircle, Pencil, Plus, X, Check, Tag,
+  FileText, ImageIcon, History, ChevronDown, ChevronUp,
 } from "lucide-react";
-import type { Recipe, RecipeIngredient, PantryItem } from "@/lib/types";
-import { UNITS } from "@/lib/types";
+import type { Recipe, RecipeIngredient, PantryItem, RecipeUse } from "@/lib/types";
+import { UnitSelect } from "@/components/UnitSelect";
 import { formatQuantity, isSkippedIngredient } from "@/lib/utils";
-import { DEFAULT_SETTINGS } from "@/lib/settings";
+import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
 type EditableIngredient = {
   id?: string;
@@ -22,7 +23,7 @@ type EditableIngredient = {
 
 function computeMissing(ingredients: RecipeIngredient[], pantry: PantryItem[], skipList: string[]): RecipeIngredient[] {
   return ingredients.filter((ing) => {
-    if (isSkippedIngredient(ing.name, skipList)) return false; // never count as missing
+    if (isSkippedIngredient(ing.name, skipList)) return false;
     const ingLower = ing.name.toLowerCase();
     const match = pantry.find(
       (p) => p.name.toLowerCase().includes(ingLower) || ingLower.includes(p.name.toLowerCase())
@@ -31,20 +32,8 @@ function computeMissing(ingredients: RecipeIngredient[], pantry: PantryItem[], s
   });
 }
 
-function UnitSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <select
-      value={UNITS.includes(value as typeof UNITS[number]) ? value : ""}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-24 text-xs border rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-    >
-      <option value="">unit</option>
-      {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-      {value && !UNITS.includes(value as typeof UNITS[number]) && (
-        <option value={value}>{value}</option>
-      )}
-    </select>
-  );
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function RecipeDetailPage() {
@@ -52,18 +41,24 @@ export default function RecipeDetailPage() {
   const router = useRouter();
   const [recipe, setRecipe] = useState<(Recipe & { recipe_ingredients: RecipeIngredient[] }) | null>(null);
   const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [cookHistory, setCookHistory] = useState<RecipeUse[]>([]);
   const [skipList, setSkipList] = useState<string[]>(DEFAULT_SETTINGS.skipIngredients);
+  const [availableTags, setAvailableTags] = useState<string[]>(DEFAULT_SETTINGS.recipeTags);
   const [loading, setLoading] = useState(true);
   const [addingToList, setAddingToList] = useState(false);
   const [cookingServings, setCookingServings] = useState<number | null>(null);
   const [cooking, setCooking] = useState(false);
+  const [cookNotes, setCookNotes] = useState("");
   const [message, setMessage] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showSource, setShowSource] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Edit state
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState("");
   const [editServings, setEditServings] = useState(4);
+  const [editTags, setEditTags] = useState<string[]>([]);
   const [editIngredients, setEditIngredients] = useState<EditableIngredient[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -76,8 +71,10 @@ export default function RecipeDetailPage() {
     const s = await settingsRes.json();
     setRecipe(d.recipe);
     setPantry(d.pantryItems || []);
+    setCookHistory(d.cookHistory || []);
     setCookingServings(d.recipe?.servings);
     if (s.settings?.skipIngredients) setSkipList(s.settings.skipIngredients);
+    if (s.settings?.recipeTags?.length) setAvailableTags(s.settings.recipeTags);
   }
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [id]);
@@ -86,6 +83,7 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
     setEditName(recipe.name);
     setEditServings(recipe.servings);
+    setEditTags(recipe.tags ?? []);
     const sorted = [...recipe.recipe_ingredients].sort((a, b) => a.sort_order - b.sort_order);
     setEditIngredients(sorted.map((ing) => ({
       id: ing.id,
@@ -118,6 +116,7 @@ export default function RecipeDetailPage() {
       body: JSON.stringify({
         name: editName.trim(),
         servings: editServings,
+        tags: editTags,
         ingredients: editIngredients
           .filter((i) => i.name.trim())
           .map((i) => ({
@@ -152,16 +151,17 @@ export default function RecipeDetailPage() {
     const res = await fetch(`/api/recipes/${id}/use`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ servings_made: cookingServings }),
+      body: JSON.stringify({ servings_made: cookingServings, notes: cookNotes || null }),
     });
     const data = await res.json();
     const parts: string[] = [];
     if (data.depleted_count > 0) parts.push(`${data.depleted_count} pantry item${data.depleted_count !== 1 ? "s" : ""} updated`);
     if (data.low_items?.length > 0) parts.push(`⚠️ Running low: ${data.low_items.join(", ")} — add to your shopping list from the Pantry tab`);
     if (data.no_unit_count > 0) parts.push(`⚠️ Set a unit in Pantry for: ${data.no_unit_names.join(", ")} (needed to track usage)`);
-    if (data.skipped_count > 0) parts.push(`Skipped (unit type mismatch, e.g. volume vs weight): ${data.skipped_names.join(", ")}`);
+    if (data.skipped_count > 0) parts.push(`Skipped (unit type mismatch): ${data.skipped_names.join(", ")}`);
     setMessage(`Cooked! ${parts.length ? parts.join(" · ") : "No pantry items matched."}`);
-    await load(); // refresh pantry readiness
+    setCookNotes("");
+    await load();
     setCooking(false);
   }
 
@@ -205,7 +205,7 @@ export default function RecipeDetailPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Recipe name</label>
             <input
@@ -226,6 +226,27 @@ export default function RecipeDetailPage() {
           </div>
         </div>
 
+        {/* Tags in edit mode */}
+        <div className="mb-4">
+          <label className="block text-xs text-gray-500 mb-2 flex items-center gap-1"><Tag size={12} /> Tags</label>
+          <div className="flex flex-wrap gap-1.5">
+            {availableTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setEditTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag])}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  editTags.includes(tag)
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <h2 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h2>
         <div className="space-y-2 mb-3">
           {editIngredients.map((ing, i) => (
@@ -238,7 +259,7 @@ export default function RecipeDetailPage() {
                     placeholder="Ingredient name"
                     className="w-full text-sm font-medium border-b border-transparent hover:border-gray-200 focus:border-indigo-400 focus:outline-none pb-0.5 mb-2"
                   />
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-1.5">
                     <input
                       type="number"
                       value={ing.quantity}
@@ -246,11 +267,11 @@ export default function RecipeDetailPage() {
                       placeholder="qty"
                       className="w-16 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     />
-                    <UnitSelect value={ing.unit} onChange={(v) => updateEditIngredient(i, "unit", v)} />
+                    <UnitSelect value={ing.unit} onChange={(v) => updateEditIngredient(i, "unit", v)} size="xs" className="w-24" />
                     <input
                       value={ing.notes}
                       onChange={(e) => updateEditIngredient(i, "notes", e.target.value)}
-                      placeholder="notes (e.g. chopped)"
+                      placeholder="notes, e.g. chopped · 1 can"
                       className="flex-1 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     />
                   </div>
@@ -288,7 +309,8 @@ export default function RecipeDetailPage() {
         </button>
       </div>
 
-      <div className="flex items-center gap-3 text-sm text-gray-500 mb-4">
+      {/* Meta row: servings, source links */}
+      <div className="flex items-center gap-3 text-sm text-gray-500 mb-3 flex-wrap">
         <span>{recipe.servings} servings</span>
         {recipe.source_url && (
           <a href={recipe.source_url} target="_blank" rel="noopener noreferrer"
@@ -296,7 +318,48 @@ export default function RecipeDetailPage() {
             <ExternalLink size={12} /> Source
           </a>
         )}
+        {recipe.source_type === "text" && recipe.source_content && (
+          <button
+            onClick={() => setShowSource((v) => !v)}
+            className="flex items-center gap-1 text-indigo-600 hover:underline"
+          >
+            <FileText size={12} /> {showSource ? "Hide source" : "View source text"}
+          </button>
+        )}
+        {recipe.source_type === "image" && recipe.source_content && (
+          <button
+            onClick={() => setShowSource((v) => !v)}
+            className="flex items-center gap-1 text-indigo-600 hover:underline"
+          >
+            <ImageIcon size={12} /> {showSource ? "Hide photo" : "View source photo"}
+          </button>
+        )}
       </div>
+
+      {/* Source content (expandable) */}
+      {showSource && recipe.source_content && (
+        <div className="mb-4 bg-gray-50 border rounded-xl overflow-hidden">
+          {recipe.source_type === "image" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={recipe.source_content} alt="Source photo" className="w-full max-h-72 object-contain" />
+          ) : (
+            <pre className="p-4 text-xs text-gray-600 whitespace-pre-wrap max-h-60 overflow-y-auto font-sans">
+              {recipe.source_content}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* Tags */}
+      {(recipe.tags ?? []).length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {recipe.tags.map((tag) => (
+            <span key={tag} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-0.5 rounded-full font-medium">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Readiness banner */}
       {pantry.length > 0 && (
@@ -323,26 +386,35 @@ export default function RecipeDetailPage() {
           {allReady ? "Add to shopping list" : `Add ${missing.length} missing ingredient${missing.length !== 1 ? "s" : ""} to list`}
         </button>
 
-        <div className="flex gap-2">
-          <div className="flex items-center gap-2 flex-1">
-            <span className="text-sm text-gray-600 whitespace-nowrap">Servings made:</span>
-            <input
-              type="number"
-              value={cookingServings ?? ""}
-              min={0.5}
-              step={0.5}
-              onChange={(e) => setCookingServings(Number(e.target.value))}
-              className="w-16 border rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+        <div className="bg-white border rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
+              <span className="text-sm text-gray-600 whitespace-nowrap">Servings made:</span>
+              <input
+                type="number"
+                value={cookingServings ?? ""}
+                min={0.5}
+                step={0.5}
+                onChange={(e) => setCookingServings(Number(e.target.value))}
+                className="w-16 border rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              onClick={handleCook}
+              disabled={cooking || !cookingServings}
+              className="flex items-center gap-2 bg-indigo-600 text-white rounded-xl px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {cooking ? <Loader2 size={16} className="animate-spin" /> : <ChefHat size={16} />}
+              Cooked!
+            </button>
           </div>
-          <button
-            onClick={handleCook}
-            disabled={cooking || !cookingServings}
-            className="flex items-center gap-2 bg-indigo-600 text-white rounded-xl px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {cooking ? <Loader2 size={16} className="animate-spin" /> : <ChefHat size={16} />}
-            Cooked!
-          </button>
+          <textarea
+            value={cookNotes}
+            onChange={(e) => setCookNotes(e.target.value)}
+            placeholder="Add a note about this cook (optional)…"
+            rows={2}
+            className="w-full border rounded-lg px-3 py-2 text-sm text-gray-600 placeholder-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          />
         </div>
       </div>
 
@@ -354,16 +426,16 @@ export default function RecipeDetailPage() {
 
       {/* Ingredients */}
       <h2 className="font-semibold mb-3 text-gray-700">Ingredients</h2>
-      <div className="space-y-2">
+      <div className="space-y-2 mb-6">
         {sorted.map((ing) => {
           const isMissing = missingSet.has(ing.id);
           return (
             <div key={ing.id} className={`flex items-center gap-3 bg-white border rounded-lg px-3 py-2.5 ${isMissing && pantry.length > 0 ? "border-amber-200" : ""}`}>
               <div className="flex-1">
                 <span className="text-sm font-medium">{ing.name}</span>
-                {ing.notes && <span className="text-xs text-gray-400 ml-1">({ing.notes})</span>}
+                {ing.notes && <span className="text-xs text-gray-400 ml-1.5 italic">{ing.notes}</span>}
               </div>
-              <span className="text-sm text-gray-500">{formatQuantity(ing.quantity, ing.unit)}</span>
+              <span className="text-sm text-gray-500 shrink-0">{formatQuantity(ing.quantity, ing.unit)}</span>
               {pantry.length > 0 && (
                 isMissing
                   ? <AlertCircle size={14} className="text-amber-400 shrink-0" />
@@ -374,7 +446,36 @@ export default function RecipeDetailPage() {
         })}
       </div>
 
-      {/* Confirm modal */}
+      {/* Cook history */}
+      {cookHistory.length > 0 && (
+        <div className="mb-6">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2 hover:text-indigo-600 transition-colors"
+          >
+            <History size={15} />
+            Cook history ({cookHistory.length})
+            {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {showHistory && (
+            <div className="space-y-2">
+              {cookHistory.map((use) => (
+                <div key={use.id} className="bg-white border rounded-lg px-3 py-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">{formatDate(use.used_at)}</span>
+                    <span className="text-xs text-gray-500">{use.servings_made} serving{use.servings_made !== 1 ? "s" : ""}</span>
+                  </div>
+                  {use.notes && (
+                    <p className="text-xs text-gray-500 mt-1 italic">{use.notes}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Confirm add to list modal */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">

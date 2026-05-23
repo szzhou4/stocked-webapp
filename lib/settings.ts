@@ -4,6 +4,7 @@ export type UserSettings = {
   stores: Record<string, StoreEntry>;
   defaultStore: string;
   skipIngredients: string[];
+  recipeTags: string[];
 };
 
 export const DEFAULT_SKIP_INGREDIENTS = [
@@ -11,6 +12,14 @@ export const DEFAULT_SKIP_INGREDIENTS = [
   "sea salt", "table salt", "fine salt", "coarse salt", "flaky salt",
   "salt and pepper", "salt & pepper", "ground pepper", "freshly ground pepper",
   "to taste", "ice", "ice water", "cold water", "boiling water",
+];
+
+export const DEFAULT_RECIPE_TAGS = [
+  "Italian", "Asian", "Mexican", "Mediterranean", "American",
+  "Quick (<30 min)", "Weeknight", "Weekend", "Meal Prep",
+  "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
+  "Breakfast", "Lunch", "Dinner", "Dessert", "Snack",
+  "Soup/Stew", "Salad", "Pasta", "Seafood", "Grilling",
 ];
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -22,4 +31,5 @@ export const DEFAULT_SETTINGS: UserSettings = {
   },
   defaultStore: "generic",
   skipIngredients: DEFAULT_SKIP_INGREDIENTS,
+  recipeTags: DEFAULT_RECIPE_TAGS,
 };
