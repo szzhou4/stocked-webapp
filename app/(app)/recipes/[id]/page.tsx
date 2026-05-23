@@ -158,7 +158,8 @@ export default function RecipeDetailPage() {
     const parts: string[] = [];
     if (data.depleted_count > 0) parts.push(`${data.depleted_count} pantry item${data.depleted_count !== 1 ? "s" : ""} updated`);
     if (data.low_items?.length > 0) parts.push(`⚠️ Running low: ${data.low_items.join(", ")} — add to your shopping list from the Pantry tab`);
-    if (data.skipped_count > 0) parts.push(`${data.skipped_count} skipped (unit mismatch: ${data.skipped_names.join(", ")})`);
+    if (data.no_unit_count > 0) parts.push(`⚠️ Set a unit in Pantry for: ${data.no_unit_names.join(", ")} (needed to track usage)`);
+    if (data.skipped_count > 0) parts.push(`Skipped (unit type mismatch, e.g. volume vs weight): ${data.skipped_names.join(", ")}`);
     setMessage(`Cooked! ${parts.length ? parts.join(" · ") : "No pantry items matched."}`);
     await load(); // refresh pantry readiness
     setCooking(false);

@@ -44,7 +44,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const lowItems: string[] = [];
   const depleted: string[] = [];
-  const skipped: string[] = []; // incompatible unit families
+  const skipped: string[] = [];   // incompatible unit families (e.g. tbsp vs g)
+  const noUnit: string[] = [];    // pantry item found but has no unit set
 
   for (const ing of recipe.recipe_ingredients) {
     const scaledQty = scaleQuantity(ing.quantity, scale);
@@ -53,6 +54,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Fuzzy match pantry item by name
     const match = pantryItems?.find((p) => namesMatch(ing.name, p.name));
     if (!match) continue;
+
+    // If pantry item has no unit but recipe ingredient does, we can't convert —
+    // report separately so user knows to set a unit on the pantry item
+    if (ing.unit && !match.unit) {
+      noUnit.push(match.name);
+      continue;
+    }
 
     // Check unit compatibility — skip if different families (e.g. tbsp vs g)
     if (!unitsCompatible(ing.unit, match.unit)) {
@@ -93,6 +101,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     depleted_count: depleted.length,
     low_items: lowItems,        // names of items now running low
     skipped_count: skipped.length,
-    skipped_names: skipped,
+    skipped_names: skipped,     // unit family mismatch (e.g. tbsp vs g)
+    no_unit_count: noUnit.length,
+    no_unit_names: noUnit,      // pantry item has no unit set
   });
 }
