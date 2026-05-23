@@ -13,6 +13,7 @@ import { UnitSelect } from "@/components/UnitSelect";
 import { formatQuantity, isSkippedIngredient } from "@/lib/utils";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 import { RECIPE_ICONS, getRecipeIcon } from "@/lib/recipeIcons";
+import { convertUnit } from "@/lib/units";
 
 type EditableIngredient = {
   id?: string;
@@ -22,14 +23,41 @@ type EditableIngredient = {
   notes: string;
 };
 
-function computeMissing(ingredients: RecipeIngredient[], pantry: PantryItem[], skipList: string[]): RecipeIngredient[] {
+function computeMissing(
+  ingredients: RecipeIngredient[],
+  pantry: PantryItem[],
+  skipList: string[],
+  scale = 1,
+): RecipeIngredient[] {
   return ingredients.filter((ing) => {
     if (isSkippedIngredient(ing.name, skipList)) return false;
     const ingLower = ing.name.toLowerCase();
     const match = pantry.find(
       (p) => p.name.toLowerCase().includes(ingLower) || ingLower.includes(p.name.toLowerCase())
     );
-    return !match || match.quantity <= 0;
+    if (!match || match.quantity <= 0) return true; // not in pantry at all
+
+    // If recipe has a quantity, check whether pantry holds enough for the scaled serving
+    if (ing.quantity != null && ing.quantity > 0) {
+      const needed = ing.quantity * scale;
+      const ingUnit = (ing.unit ?? "").toLowerCase().trim();
+      const pantryUnit = (match.unit ?? "").toLowerCase().trim();
+
+      if (ingUnit === pantryUnit) {
+        // Same unit — direct comparison
+        if (match.quantity < needed) return true;
+      } else if (ingUnit && pantryUnit) {
+        // Different units — try conversion
+        const neededConverted = convertUnit(needed, ingUnit, pantryUnit);
+        if (neededConverted !== null && match.quantity < neededConverted) return true;
+      } else if (!ingUnit && !pantryUnit) {
+        // Both unitless (count) — direct comparison
+        if (match.quantity < needed) return true;
+      }
+      // Mixed unit presence → existence check only (can't compare)
+    }
+
+    return false;
   });
 }
 
@@ -47,6 +75,7 @@ export default function RecipeDetailPage() {
   const [availableTags, setAvailableTags] = useState<string[]>(DEFAULT_SETTINGS.recipeTags);
   const [loading, setLoading] = useState(true);
   const [addingToList, setAddingToList] = useState(false);
+  const [viewServings, setViewServings] = useState<number>(4);
   const [cookingServings, setCookingServings] = useState<number | null>(null);
   const [cooking, setCooking] = useState(false);
   const [cookNotes, setCookNotes] = useState("");
@@ -74,6 +103,7 @@ export default function RecipeDetailPage() {
     setRecipe(d.recipe);
     setPantry(d.pantryItems || []);
     setCookHistory(d.cookHistory || []);
+    setViewServings(d.recipe?.servings ?? 4);
     setCookingServings(d.recipe?.servings);
     if (s.settings?.skipIngredients) setSkipList(s.settings.skipIngredients);
     if (s.settings?.recipeTags?.length) setAvailableTags(s.settings.recipeTags);
@@ -133,6 +163,7 @@ export default function RecipeDetailPage() {
     });
     const d = await res.json();
     setRecipe(d.recipe);
+    setViewServings(d.recipe?.servings ?? 4);
     setCookingServings(d.recipe?.servings);
     setEditMode(false);
     setSaving(false);
@@ -190,7 +221,8 @@ export default function RecipeDetailPage() {
   );
 
   const sorted = [...recipe.recipe_ingredients].sort((a, b) => a.sort_order - b.sort_order);
-  const missing = computeMissing(sorted, pantry, skipList);
+  const scale = recipe.servings > 0 ? viewServings / recipe.servings : 1;
+  const missing = computeMissing(sorted, pantry, skipList, scale);
   const allReady = missing.length === 0;
   const missingSet = new Set(missing.map((m) => m.id));
   const iconDef = getRecipeIcon(recipe.icon);
@@ -356,9 +388,29 @@ export default function RecipeDetailPage() {
         </button>
       </div>
 
-      {/* Meta row: servings, source links */}
+      {/* Meta row: servings stepper + source links */}
       <div className="flex items-center gap-3 text-sm text-gray-500 mb-3 flex-wrap">
-        <span>{recipe.servings} servings</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => { const v = Math.max(1, viewServings - 1); setViewServings(v); setCookingServings(v); }}
+            className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors leading-none select-none"
+          >−</button>
+          <span className={`text-sm font-semibold tabular-nums w-5 text-center ${viewServings !== recipe.servings ? "text-indigo-600" : ""}`}>
+            {viewServings}
+          </span>
+          <button
+            onClick={() => { const v = viewServings + 1; setViewServings(v); setCookingServings(v); }}
+            className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors leading-none select-none"
+          >+</button>
+          <span className="text-sm text-gray-500">servings</span>
+          {viewServings !== recipe.servings && (
+            <button
+              onClick={() => { setViewServings(recipe.servings); setCookingServings(recipe.servings); }}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors ml-0.5"
+              title="Reset to original"
+            >reset</button>
+          )}
+        </div>
         {recipe.source_url && (
           <a href={recipe.source_url} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 text-indigo-600 hover:underline">
@@ -472,17 +524,23 @@ export default function RecipeDetailPage() {
       )}
 
       {/* Ingredients */}
-      <h2 className="font-semibold mb-3 text-gray-700">Ingredients</h2>
+      <h2 className="font-semibold mb-3 text-gray-700 flex items-baseline gap-2">
+        Ingredients
+        {scale !== 1 && (
+          <span className="text-xs font-normal text-indigo-500">scaled ×{Math.round(scale * 100) / 100}</span>
+        )}
+      </h2>
       <div className="space-y-2 mb-6">
         {sorted.map((ing) => {
           const isMissing = missingSet.has(ing.id);
+          const scaledQty = ing.quantity != null ? Math.round(ing.quantity * scale * 1000) / 1000 : null;
           return (
             <div key={ing.id} className={`flex items-center gap-3 bg-white border rounded-lg px-3 py-2.5 ${isMissing && pantry.length > 0 ? "border-amber-200" : ""}`}>
               <div className="flex-1">
                 <span className="text-sm font-medium">{ing.name}</span>
                 {ing.notes && <span className="text-xs text-gray-400 ml-1.5 italic">{ing.notes}</span>}
               </div>
-              <span className="text-sm text-gray-500 shrink-0">{formatQuantity(ing.quantity, ing.unit)}</span>
+              <span className="text-sm text-gray-500 shrink-0">{formatQuantity(scaledQty, ing.unit)}</span>
               {pantry.length > 0 && (
                 isMissing
                   ? <AlertCircle size={14} className="text-amber-400 shrink-0" />
