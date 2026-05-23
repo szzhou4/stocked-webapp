@@ -60,7 +60,8 @@ export default function RecipesPage() {
     const filtered = recipes.filter((r) => {
       const matchesSearch = !q
         || r.name.toLowerCase().includes(q)
-        || (r.tags ?? []).some((t) => t.toLowerCase().includes(q));
+        || (r.tags ?? []).some((t) => t.toLowerCase().includes(q))
+        || r.recipe_ingredients.some((ing) => ing.name.toLowerCase().includes(q));
       const matchesTag = !activeTag || (r.tags ?? []).includes(activeTag);
       return matchesSearch && matchesTag;
     });
@@ -101,7 +102,7 @@ export default function RecipesPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search recipes or tags…"
+            placeholder="Search recipes, ingredients, or tags…"
             className="w-full pl-9 pr-9 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
           />
           {search && (
