@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { normalizeUnit } from "@/lib/units";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -56,7 +57,11 @@ export async function extractIngredientsFromText(text: string, skipIngredients?:
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
-  return filterBasicIngredients(JSON.parse(jsonMatch[0]), skipIngredients);
+  const parsed: ExtractedIngredient[] = JSON.parse(jsonMatch[0]);
+  return filterBasicIngredients(
+    parsed.map((i) => ({ ...i, unit: normalizeUnit(i.unit) })),
+    skipIngredients,
+  );
 }
 
 export async function extractIngredientsFromUrl(url: string, skipIngredients?: string[]): Promise<ExtractedIngredient[]> {
@@ -97,7 +102,11 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
-  return filterBasicIngredients(JSON.parse(jsonMatch[0]), skipIngredients);
+  const parsed: ExtractedIngredient[] = JSON.parse(jsonMatch[0]);
+  return filterBasicIngredients(
+    parsed.map((i) => ({ ...i, unit: normalizeUnit(i.unit) })),
+    skipIngredients,
+  );
 }
 
 export async function categorizeIngredients(

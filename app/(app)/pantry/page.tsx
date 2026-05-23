@@ -3,25 +3,11 @@
 import { useEffect, useState } from "react";
 import { Plus, X, AlertTriangle, Minus, ShoppingCart, Check } from "lucide-react";
 import type { PantryItem, ShoppingItem } from "@/lib/types";
-import { STORE_LABELS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
+import { STORE_LABELS, CATEGORIES, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 import { unitsCompatible, convertUnit } from "@/lib/units";
-
-function UnitSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
-  const isCustom = value && !UNITS.includes(value as typeof UNITS[number]);
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className || ""}`}
-    >
-      <option value="">— unit —</option>
-      {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-      {isCustom && <option value={value}>{value}</option>}
-    </select>
-  );
-}
+import { UnitSelect } from "@/components/UnitSelect";
 
 async function deleteItem(id: string) {
   await fetch("/api/pantry", {

@@ -1,5 +1,40 @@
 export type UnitFamily = "volume" | "weight" | "count" | "other";
 
+/**
+ * Maps common free-text unit variants to canonical short forms.
+ * Call this on any unit string coming from AI extraction or user input
+ * before storing or comparing.
+ */
+const UNIT_ALIASES: Record<string, string> = {
+  // Volume
+  tablespoon: "tbsp", tablespoons: "tbsp",
+  teaspoon: "tsp",   teaspoons: "tsp",
+  cup: "cups",
+  milliliter: "ml",  milliliters: "ml", millilitre: "ml", millilitres: "ml",
+  liter: "L",        liters: "L",       litre: "L",       litres: "L",
+  // Weight
+  ounce: "oz",  ounces: "oz",
+  pound: "lbs", pounds: "lbs",
+  gram: "g",    grams: "g",
+  kilogram: "kg", kilograms: "kg",
+  // Count — normalise plurals/singulars to the plural canonical form
+  units: "unit",
+  clove: "cloves",
+  slice: "slices",
+  piece: "pieces",
+  loaf: "loaves",
+  can: "cans",
+  bag: "bags",
+  bunch: "bunches",
+};
+
+export function normalizeUnit(unit: string | null | undefined): string | null {
+  if (!unit) return null;
+  const trimmed = unit.trim();
+  if (!trimmed) return null;
+  return UNIT_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
 // Conversion factors to canonical units (all keys lowercase)
 // Volume → ml
 const TO_ML: Record<string, number> = {
@@ -28,7 +63,7 @@ const COUNT_UNITS = new Set([
 
 export function getUnitFamily(unit: string | null | undefined): UnitFamily {
   if (!unit) return "other";
-  const u = unit.toLowerCase().trim();
+  const u = (normalizeUnit(unit) ?? unit).toLowerCase().trim();
   if (u in TO_ML) return "volume";
   if (u in TO_G) return "weight";
   if (COUNT_UNITS.has(u)) return "count";
@@ -46,8 +81,8 @@ export function convertUnit(
   toUnit: string | null | undefined,
 ): number | null {
   if (!fromUnit || !toUnit) return null;
-  const from = fromUnit.toLowerCase().trim();
-  const to = toUnit.toLowerCase().trim();
+  const from = (normalizeUnit(fromUnit) ?? fromUnit).toLowerCase().trim();
+  const to = (normalizeUnit(toUnit) ?? toUnit).toLowerCase().trim();
   if (from === to) return qty;
 
   const fromFamily = getUnitFamily(from);
@@ -72,13 +107,15 @@ export function unitsCompatible(
   a: string | null | undefined,
   b: string | null | undefined,
 ): boolean {
-  const aEmpty = !a;
-  const bEmpty = !b;
+  const aNorm = normalizeUnit(a);
+  const bNorm = normalizeUnit(b);
+  const aEmpty = !aNorm;
+  const bEmpty = !bNorm;
   if (aEmpty && bEmpty) return true;
   if (aEmpty || bEmpty) return false; // one has units, other doesn't
 
-  const al = a!.toLowerCase().trim();
-  const bl = b!.toLowerCase().trim();
+  const al = aNorm!.toLowerCase().trim();
+  const bl = bNorm!.toLowerCase().trim();
   if (al === bl) return true;
 
   const fa = getUnitFamily(al);

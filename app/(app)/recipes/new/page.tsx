@@ -6,6 +6,7 @@ import { ArrowLeft, Link2, Camera, Type, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import type { CategorizedIngredient } from "@/lib/claude/extract";
 import { STORE_LABELS } from "@/lib/types";
+import { UnitSelect } from "@/components/UnitSelect";
 
 type Mode = "url" | "image" | "text";
 
@@ -91,7 +92,7 @@ export default function NewRecipePage() {
     img.src = objectUrl;
   }
 
-  function updateIngredient(i: number, field: keyof CategorizedIngredient, value: string | number) {
+  function updateIngredient(i: number, field: keyof CategorizedIngredient, value: string | number | null) {
     setIngredients((prev) => prev.map((ing, idx) => idx === i ? { ...ing, [field]: value } : ing));
   }
 
@@ -248,11 +249,11 @@ export default function NewRecipePage() {
                           type="number"
                           className="w-16 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                         />
-                        <input
+                        <UnitSelect
                           value={ing.unit ?? ""}
-                          onChange={(e) => updateIngredient(i, "unit", e.target.value)}
-                          placeholder="unit"
-                          className="w-20 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          onChange={(v) => updateIngredient(i, "unit", v || null)}
+                          size="xs"
+                          className="w-24"
                         />
                         <select
                           value={ing.store}
