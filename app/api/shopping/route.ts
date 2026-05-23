@@ -65,10 +65,10 @@ export async function PATCH(request: NextRequest) {
           .eq("id", item.pantry_item_id);
       }
     } else if (item && updates.purchased_quantity > 0) {
-      // Create new pantry item from shopping item
+      // Create new pantry item — use substituted name if provided
       await supabase.from("pantry_items").insert({
         user_id: user.id,
-        name: item.name,
+        name: updates.name || item.name,
         quantity: updates.purchased_quantity,
         unit: updates.purchased_unit || item.unit,
         category: item.category,

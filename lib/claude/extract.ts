@@ -2,6 +2,20 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const SKIP_INGREDIENTS = [
+  "water", "salt", "pepper", "black pepper", "white pepper", "kosher salt",
+  "sea salt", "table salt", "fine salt", "coarse salt", "flaky salt",
+  "salt and pepper", "salt & pepper", "ground pepper", "freshly ground pepper",
+  "to taste", "ice", "ice water", "cold water", "boiling water",
+];
+
+function filterBasicIngredients(ingredients: ExtractedIngredient[]): ExtractedIngredient[] {
+  return ingredients.filter((ing) => {
+    const lower = ing.name.toLowerCase().trim();
+    return !SKIP_INGREDIENTS.some((skip) => lower === skip || lower.startsWith(skip + " ") || lower.endsWith(" " + skip));
+  });
+}
+
 export type ExtractedIngredient = {
   name: string;
   quantity: number | null;
@@ -24,14 +38,14 @@ export async function extractIngredientsFromText(text: string): Promise<Extracte
     max_tokens: 1024,
     messages: [{
       role: "user",
-      content: `Extract all ingredients from this recipe text. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null, e.g. "cups", "tbsp", "lbs", "g", or null if no unit), notes (string or null, e.g. "chopped", "room temperature"). Only return the JSON array, no other text.\n\nRecipe text:\n${text}`,
+      content: `Extract all ingredients from this recipe text. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null, e.g. "cups", "tbsp", "lbs", "g", or null if no unit), notes (string or null, e.g. "chopped", "room temperature"). Omit basic pantry staples that every kitchen has: water, salt, pepper, and their common variations (kosher salt, black pepper, etc.). Only return the JSON array, no other text.\n\nRecipe text:\n${text}`,
     }],
   });
 
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
-  return JSON.parse(jsonMatch[0]);
+  return filterBasicIngredients(JSON.parse(jsonMatch[0]));
 }
 
 export async function extractIngredientsFromUrl(url: string): Promise<ExtractedIngredient[]> {
@@ -63,7 +77,7 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
         },
         {
           type: "text",
-          text: `Extract all ingredients from this recipe image. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null), notes (string or null). Only return the JSON array, no other text.`,
+          text: `Extract all ingredients from this recipe image. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null), notes (string or null). Omit basic pantry staples: water, salt, pepper, and their variations. Only return the JSON array, no other text.`,
         },
       ],
     }],
@@ -72,7 +86,7 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
-  return JSON.parse(jsonMatch[0]);
+  return filterBasicIngredients(JSON.parse(jsonMatch[0]));
 }
 
 export async function categorizeIngredients(ingredients: ExtractedIngredient[]): Promise<CategorizedIngredient[]> {

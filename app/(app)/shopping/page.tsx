@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Check, X, ChevronDown, ChevronUp, ShoppingBag } from "lucide-react";
 import type { ShoppingItem, Store } from "@/lib/types";
-import { STORE_LABELS, STORE_COLORS, CATEGORIES } from "@/lib/types";
+import { STORE_LABELS, STORE_COLORS, CATEGORIES, UNITS } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -21,12 +21,29 @@ function groupItems(items: ShoppingItem[]): GroupedItems {
 
 const STORE_ORDER: Store[] = ["costco", "asian", "generic", "other"];
 
+function UnitSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return (
+    <select
+      value={UNITS.includes(value as typeof UNITS[number]) ? value : ""}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn("border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500", className)}
+    >
+      <option value="">unit</option>
+      {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+      {value && !UNITS.includes(value as typeof UNITS[number]) && (
+        <option value={value}>{value}</option>
+      )}
+    </select>
+  );
+}
+
 export default function ShoppingPage() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsedStores, setCollapsedStores] = useState<Set<string>>(new Set());
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [purchaseModal, setPurchaseModal] = useState<ShoppingItem | null>(null);
+  const [purchaseName, setPurchaseName] = useState("");
   const [purchaseQty, setPurchaseQty] = useState("");
   const [purchaseUnit, setPurchaseUnit] = useState("");
   const [addingManual, setAddingManual] = useState(false);
@@ -51,6 +68,7 @@ export default function ShoppingPage() {
 
   async function handleCheck(item: ShoppingItem) {
     setPurchaseModal(item);
+    setPurchaseName(item.name);
     setPurchaseQty(item.quantity?.toString() || "");
     setPurchaseUnit(item.unit || "");
   }
@@ -63,6 +81,7 @@ export default function ShoppingPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: purchaseModal.id,
+        name: purchaseName !== purchaseModal.name ? purchaseName : undefined,
         checked: true,
         purchased_quantity: parseFloat(purchaseQty) || null,
         purchased_unit: purchaseUnit || null,
@@ -173,11 +192,10 @@ export default function ShoppingPage() {
               onChange={(e) => setNewItem((p) => ({ ...p, quantity: e.target.value }))}
               className="w-20 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
-            <input
-              placeholder="Unit"
+            <UnitSelect
               value={newItem.unit}
-              onChange={(e) => setNewItem((p) => ({ ...p, unit: e.target.value }))}
-              className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              onChange={(v) => setNewItem((p) => ({ ...p, unit: v }))}
+              className="flex-1"
             />
             <select
               value={newItem.store}
@@ -287,23 +305,37 @@ export default function ShoppingPage() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
             <div>
-              <h3 className="font-semibold text-lg">{purchaseModal.name}</h3>
-              <p className="text-gray-500 text-sm">How much did you buy?</p>
+              <h3 className="font-semibold text-lg">Confirm purchase</h3>
+              <p className="text-gray-500 text-sm">Edit name if substituting, then confirm amount.</p>
             </div>
-            <div className="flex gap-3">
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Item name</label>
               <input
-                type="number"
-                value={purchaseQty}
-                onChange={(e) => setPurchaseQty(e.target.value)}
-                placeholder="Amount"
-                className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={purchaseName}
+                onChange={(e) => setPurchaseName(e.target.value)}
+                placeholder="Item name"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <input
-                value={purchaseUnit}
-                onChange={(e) => setPurchaseUnit(e.target.value)}
-                placeholder="Unit"
-                className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+              {purchaseName !== purchaseModal.name && (
+                <p className="text-xs text-indigo-500 mt-1">Will be saved to pantry as &ldquo;{purchaseName}&rdquo;</p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Amount purchased</label>
+              <div className="flex gap-3">
+                <input
+                  type="number"
+                  value={purchaseQty}
+                  onChange={(e) => setPurchaseQty(e.target.value)}
+                  placeholder="Qty"
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <UnitSelect
+                  value={purchaseUnit}
+                  onChange={setPurchaseUnit}
+                  className="w-28"
+                />
+              </div>
             </div>
             <div className="flex gap-3">
               <button

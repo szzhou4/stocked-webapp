@@ -14,6 +14,16 @@ export const STORE_COLORS: Record<Store, string> = {
   other: "bg-gray-100 text-gray-800",
 };
 
+export const UNITS = [
+  "cups", "tbsp", "tsp",
+  "oz", "lbs", "g", "kg",
+  "ml", "L",
+  "cloves", "slices", "pieces", "loaves", "cans", "bags", "bunches",
+  "unit",
+] as const;
+
+export type Unit = (typeof UNITS)[number] | string;
+
 export const CATEGORIES = [
   "produce",
   "dairy",

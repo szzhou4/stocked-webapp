@@ -3,7 +3,23 @@
 import { useEffect, useState } from "react";
 import { Plus, X, AlertTriangle } from "lucide-react";
 import type { PantryItem, Store } from "@/lib/types";
-import { STORE_LABELS, CATEGORIES } from "@/lib/types";
+import { STORE_LABELS, CATEGORIES, UNITS } from "@/lib/types";
+
+function UnitSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return (
+    <select
+      value={UNITS.includes(value as typeof UNITS[number]) ? value : ""}
+      onChange={(e) => onChange(e.target.value)}
+      className={`border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className || ""}`}
+    >
+      <option value="">unit</option>
+      {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+      {value && !UNITS.includes(value as typeof UNITS[number]) && (
+        <option value={value}>{value}</option>
+      )}
+    </select>
+  );
+}
 import { formatQuantity } from "@/lib/utils";
 
 export default function PantryPage() {
@@ -135,11 +151,10 @@ export default function PantryPage() {
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-0.5 block">Unit</label>
-              <input
-                placeholder="lbs"
+              <UnitSelect
                 value={newItem.unit}
-                onChange={(e) => setNewItem((p) => ({ ...p, unit: e.target.value }))}
-                className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                onChange={(v) => setNewItem((p) => ({ ...p, unit: v }))}
+                className="w-full"
               />
             </div>
           </div>
@@ -229,7 +244,10 @@ export default function PantryPage() {
                         </div>
                         <div className="flex flex-col gap-0.5 justify-end">
                           <label className="text-[10px] text-gray-400 uppercase tracking-wide">Unit</label>
-                          <span className="text-sm text-gray-500 py-1">{item.unit || "—"}</span>
+                          <UnitSelect
+                            value={item.unit || ""}
+                            onChange={(v) => handleUpdate(item.id, "unit", v)}
+                          />
                         </div>
                       </div>
                       <p className="text-[11px] text-gray-400">Min triggers low-stock alert &amp; auto-adds to shopping list</p>
