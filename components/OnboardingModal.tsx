@@ -57,10 +57,12 @@ const slides: Slide[] = [
             { icon: <Type size={14} className="text-indigo-400" />, label: "Paste text", desc: "Copy from anywhere" },
             { icon: <Tag size={14} className="text-indigo-400" />, label: "Tags + search", desc: "Find recipes fast by ingredient or tag" },
           ].map(({ icon, label, desc }) => (
-            <div key={label} className="flex items-center gap-3 text-sm">
+            <div key={label} className="flex items-center gap-3">
               <div className="w-6 h-6 bg-indigo-50 rounded-lg flex items-center justify-center shrink-0">{icon}</div>
-              <span className="font-medium text-gray-800">{label}</span>
-              <span className="text-gray-400 text-xs">{desc}</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 leading-snug">{label}</p>
+                <p className="text-xs text-gray-400 leading-snug">{desc}</p>
+              </div>
             </div>
           ))}
         </div>
