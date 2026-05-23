@@ -28,7 +28,14 @@ export type CategorizedIngredient = ExtractedIngredient & {
   category: string;
 };
 
-const STORES = `costco (bulk/warehouse items like large quantities of meat, olive oil, nuts, frozen goods, paper products), asian (HMart/Ranch99 - Asian groceries, soy sauce, fish sauce, tofu, rice, noodles, Asian produce, kimchi, miso, sesame oil, coconut milk, etc.), generic (standard supermarket items like common produce, dairy, bread, standard pantry staples), other (specialty items, alcohol, items that don't fit elsewhere)`;
+const DEFAULT_STORES = `costco (bulk/warehouse items like large quantities of meat, olive oil, nuts, frozen goods, paper products), asian (HMart/Ranch99 - Asian groceries, soy sauce, fish sauce, tofu, rice, noodles, Asian produce, kimchi, miso, sesame oil, coconut milk, etc.), generic (standard supermarket items like common produce, dairy, bread, standard pantry staples), other (specialty items, alcohol, items that don't fit elsewhere)`;
+
+function buildStoreString(storeDescriptions?: Record<string, { name: string; description: string }>): string {
+  if (!storeDescriptions) return DEFAULT_STORES;
+  return Object.entries(storeDescriptions)
+    .map(([key, { name, description }]) => `${key} (${name}: ${description})`)
+    .join(", ");
+}
 
 const CATEGORIES = `produce, dairy, meat/seafood, grains/dry, canned/jarred, frozen, condiments/sauces, baking, beverages, snacks, other`;
 
@@ -89,8 +96,12 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
   return filterBasicIngredients(JSON.parse(jsonMatch[0]));
 }
 
-export async function categorizeIngredients(ingredients: ExtractedIngredient[]): Promise<CategorizedIngredient[]> {
+export async function categorizeIngredients(
+  ingredients: ExtractedIngredient[],
+  storeDescriptions?: Record<string, { name: string; description: string }>
+): Promise<CategorizedIngredient[]> {
   const list = ingredients.map((i) => i.name).join("\n");
+  const STORES = buildStoreString(storeDescriptions);
 
   const message = await client.messages.create({
     model: "claude-haiku-4-5-20251001",

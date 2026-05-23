@@ -1,11 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Check, X, ChevronDown, ChevronUp, ShoppingBag } from "lucide-react";
+import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag } from "lucide-react";
 import type { ShoppingItem, Store } from "@/lib/types";
 import { STORE_LABELS, STORE_COLORS, CATEGORIES, UNITS } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 type GroupedItems = Record<Store, Record<string, ShoppingItem[]>>;
 
@@ -37,6 +49,67 @@ function UnitSelect({ value, onChange, className }: { value: string; onChange: (
   );
 }
 
+function DraggableItem({ item, onCheck, onDelete, disabled }: {
+  item: ShoppingItem;
+  onCheck: (item: ShoppingItem) => void;
+  onDelete: (id: string) => void;
+  disabled: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: item.id });
+  const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.4 : 1 } : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 bg-white border rounded-lg px-3 py-2.5 touch-none"
+    >
+      {/* Drag handle */}
+      <div
+        {...listeners}
+        {...attributes}
+        className="text-gray-200 cursor-grab active:cursor-grabbing shrink-0 px-0.5"
+        style={{ touchAction: "none" }}
+      >
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="3" cy="3" r="1.5"/><circle cx="7" cy="3" r="1.5"/>
+          <circle cx="3" cy="8" r="1.5"/><circle cx="7" cy="8" r="1.5"/>
+          <circle cx="3" cy="13" r="1.5"/><circle cx="7" cy="13" r="1.5"/>
+        </svg>
+      </div>
+      <button
+        onClick={() => onCheck(item)}
+        disabled={disabled}
+        className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 transition-colors shrink-0"
+      />
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium">{item.name}</span>
+        {(item.quantity || item.unit) && (
+          <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
+        )}
+      </div>
+      <button onClick={() => onDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors">
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+function DroppableStore({ store, isOver, children }: { store: Store; isOver: boolean; children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({ id: `store:${store}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "mb-4 rounded-xl transition-colors",
+        isOver && "bg-indigo-50 ring-2 ring-indigo-300"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function ShoppingPage() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +121,13 @@ export default function ShoppingPage() {
   const [purchaseUnit, setPurchaseUnit] = useState("");
   const [addingManual, setAddingManual] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", quantity: "", unit: "", store: "generic" as Store, category: "other" });
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  );
 
   async function load() {
     const res = await fetch("/api/shopping");
@@ -64,6 +144,38 @@ export default function ShoppingPage() {
       next.has(store) ? next.delete(store) : next.add(store);
       return next;
     });
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveId(null);
+    setOverId(null);
+    if (!over) return;
+
+    const itemId = active.id as string;
+    const overId = over.id as string;
+    if (!overId.startsWith("store:")) return;
+
+    const targetStore = overId.replace("store:", "") as Store;
+    const item = items.find((i) => i.id === itemId);
+    if (!item || item.store === targetStore) return;
+
+    // Optimistic update
+    setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, store: targetStore } : i));
+
+    await fetch("/api/shopping", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: itemId, store: targetStore }),
+    });
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    setOverId(event.over ? String(event.over.id) : null);
   }
 
   async function handleCheck(item: ShoppingItem) {
@@ -117,10 +229,7 @@ export default function ShoppingPage() {
     const res = await fetch("/api/shopping", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...newItem,
-        quantity: parseFloat(newItem.quantity) || null,
-      }),
+      body: JSON.stringify({ ...newItem, quantity: parseFloat(newItem.quantity) || null }),
     });
     if (res.ok) {
       await load();
@@ -132,11 +241,7 @@ export default function ShoppingPage() {
   async function clearChecked() {
     const checked = items.filter((i) => i.checked);
     await Promise.all(checked.map((i) =>
-      fetch("/api/shopping", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: i.id }),
-      })
+      fetch("/api/shopping", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: i.id }) })
     ));
     await load();
   }
@@ -144,6 +249,7 @@ export default function ShoppingPage() {
   const unchecked = items.filter((i) => !i.checked);
   const checked = items.filter((i) => i.checked);
   const grouped = groupItems(unchecked);
+  const activeItem = activeId ? items.find((i) => i.id === activeId) : null;
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
@@ -158,10 +264,7 @@ export default function ShoppingPage() {
         </div>
         <div className="flex items-center gap-2">
           {checked.length > 0 && (
-            <button
-              onClick={clearChecked}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-            >
+            <button onClick={clearChecked} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
               Clear done
             </button>
           )}
@@ -169,8 +272,7 @@ export default function ShoppingPage() {
             onClick={() => setAddingManual((v) => !v)}
             className="flex items-center gap-1.5 bg-indigo-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
           >
-            <Plus size={16} />
-            Add
+            <Plus size={16} /> Add
           </button>
         </div>
       </div>
@@ -186,25 +288,17 @@ export default function ShoppingPage() {
           />
           <div className="flex gap-2">
             <input
-              placeholder="Qty"
-              type="number"
-              value={newItem.quantity}
+              placeholder="Qty" type="number" value={newItem.quantity}
               onChange={(e) => setNewItem((p) => ({ ...p, quantity: e.target.value }))}
               className="w-20 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
-            <UnitSelect
-              value={newItem.unit}
-              onChange={(v) => setNewItem((p) => ({ ...p, unit: v }))}
-              className="flex-1"
-            />
+            <UnitSelect value={newItem.unit} onChange={(v) => setNewItem((p) => ({ ...p, unit: v }))} className="flex-1" />
             <select
               value={newItem.store}
               onChange={(e) => setNewItem((p) => ({ ...p, store: e.target.value as Store }))}
               className="flex-1 border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
-              {Object.entries(STORE_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
-              ))}
+              {Object.entries(STORE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
           <select
@@ -233,46 +327,59 @@ export default function ShoppingPage() {
         </div>
       )}
 
-      {/* Grouped unchecked items */}
-      {STORE_ORDER.filter((s) => grouped[s] && Object.keys(grouped[s]).length > 0).map((store) => (
-        <div key={store} className="mb-4">
-          <button
-            onClick={() => toggleStore(store)}
-            className="w-full flex items-center justify-between mb-2"
-          >
-            <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", STORE_COLORS[store])}>
-              {STORE_LABELS[store]}
-            </span>
-            {collapsedStores.has(store) ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronUp size={16} className="text-gray-400" />}
-          </button>
+      {unchecked.length > 0 && (
+        <p className="text-xs text-gray-400 mb-3">Drag items between store sections to reassign them</p>
+      )}
 
-          {!collapsedStores.has(store) && Object.entries(grouped[store]).map(([category, catItems]) => (
-            <div key={category} className="mb-3">
-              <p className="text-xs uppercase tracking-wide text-gray-400 font-medium mb-1.5 ml-1">{category}</p>
-              <div className="space-y-1.5">
-                {catItems.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 bg-white border rounded-lg px-3 py-2.5">
-                    <button
-                      onClick={() => handleCheck(item)}
+      {/* Drag and drop context */}
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+      >
+        {STORE_ORDER.filter((s) => grouped[s] && Object.keys(grouped[s]).length > 0).map((store) => (
+          <DroppableStore key={store} store={store} isOver={overId === `store:${store}`}>
+            <button
+              onClick={() => toggleStore(store)}
+              className="w-full flex items-center justify-between mb-2 px-1"
+            >
+              <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", STORE_COLORS[store])}>
+                {STORE_LABELS[store]}
+              </span>
+              {collapsedStores.has(store) ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronUp size={16} className="text-gray-400" />}
+            </button>
+
+            {!collapsedStores.has(store) && Object.entries(grouped[store]).map(([category, catItems]) => (
+              <div key={category} className="mb-3">
+                <p className="text-xs uppercase tracking-wide text-gray-400 font-medium mb-1.5 ml-1">{category}</p>
+                <div className="space-y-1.5">
+                  {catItems.map((item) => (
+                    <DraggableItem
+                      key={item.id}
+                      item={item}
+                      onCheck={handleCheck}
+                      onDelete={handleDelete}
                       disabled={checkingId === item.id}
-                      className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 transition-colors shrink-0"
                     />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium">{item.name}</span>
-                      {(item.quantity || item.unit) && (
-                        <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
-                      )}
-                    </div>
-                    <button onClick={() => handleDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors">
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
+            ))}
+          </DroppableStore>
+        ))}
+
+        <DragOverlay>
+          {activeItem && (
+            <div className="flex items-center gap-3 bg-white border-2 border-indigo-400 rounded-lg px-3 py-2.5 shadow-lg opacity-90">
+              <span className="text-sm font-medium">{activeItem.name}</span>
+              {(activeItem.quantity || activeItem.unit) && (
+                <span className="text-xs text-gray-400">{formatQuantity(activeItem.quantity, activeItem.unit)}</span>
+              )}
             </div>
-          ))}
-        </div>
-      ))}
+          )}
+        </DragOverlay>
+      </DndContext>
 
       {/* Checked items */}
       {checked.length > 0 && (
@@ -281,10 +388,7 @@ export default function ShoppingPage() {
           <div className="space-y-1.5">
             {checked.map((item) => (
               <div key={item.id} className="flex items-center gap-3 bg-gray-50 border rounded-lg px-3 py-2.5 opacity-60">
-                <button
-                  onClick={() => handleUncheck(item)}
-                  className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center shrink-0"
-                >
+                <button onClick={() => handleUncheck(item)} className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center shrink-0">
                   <Check size={12} className="text-white" />
                 </button>
                 <span className="flex-1 text-sm line-through text-gray-400">{item.name}</span>
@@ -313,7 +417,6 @@ export default function ShoppingPage() {
               <input
                 value={purchaseName}
                 onChange={(e) => setPurchaseName(e.target.value)}
-                placeholder="Item name"
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               {purchaseName !== purchaseModal.name && (
@@ -324,30 +427,18 @@ export default function ShoppingPage() {
               <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Amount purchased</label>
               <div className="flex gap-3">
                 <input
-                  type="number"
-                  value={purchaseQty}
-                  onChange={(e) => setPurchaseQty(e.target.value)}
+                  type="number" value={purchaseQty} onChange={(e) => setPurchaseQty(e.target.value)}
                   placeholder="Qty"
                   className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                <UnitSelect
-                  value={purchaseUnit}
-                  onChange={setPurchaseUnit}
-                  className="w-28"
-                />
+                <UnitSelect value={purchaseUnit} onChange={setPurchaseUnit} className="w-28" />
               </div>
             </div>
             <div className="flex gap-3">
-              <button
-                onClick={() => setPurchaseModal(null)}
-                className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-              >
+              <button onClick={() => setPurchaseModal(null)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                 Cancel
               </button>
-              <button
-                onClick={confirmPurchase}
-                className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors"
-              >
+              <button onClick={confirmPurchase} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors">
                 Confirm
               </button>
             </div>

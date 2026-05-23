@@ -62,14 +62,33 @@ export default function NewRecipePage() {
   }
 
   function handleImageFile(file: File) {
-    setImageMediaType(file.type || "image/jpeg");
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      setImagePreview(result);
-      setImageBase64(result.split(",")[1]);
+    setError("");
+    if (file.size > 20 * 1024 * 1024) {
+      setError("Image too large (max 20 MB). Please use a smaller photo.");
+      return;
+    }
+    // Convert any format (including HEIC from iPhone) to JPEG via canvas
+    const objectUrl = URL.createObjectURL(file);
+    const img = document.createElement("img");
+    img.onload = () => {
+      const MAX = 1600;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setImagePreview(dataUrl);
+      setImageBase64(dataUrl.split(",")[1]);
+      setImageMediaType("image/jpeg");
+      URL.revokeObjectURL(objectUrl);
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      setError("Could not read image. Please try a JPEG or PNG photo.");
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.src = objectUrl;
   }
 
   function updateIngredient(i: number, field: keyof CategorizedIngredient, value: string | number) {

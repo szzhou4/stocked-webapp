@@ -211,7 +211,7 @@ export default function PantryPage() {
                       {isLow && <AlertTriangle size={14} className="text-amber-500" />}
                       <button
                         onClick={() => setEditing(isEditing ? null : item.id)}
-                        className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+                        className="text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors px-2 py-1 rounded-lg hover:bg-indigo-50 active:bg-indigo-100"
                       >
                         {isEditing ? "Done" : "Edit"}
                       </button>

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ShoppingCart, Package } from "lucide-react";
+import { BookOpen, ShoppingCart, Package, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/recipes", label: "Recipes", Icon: BookOpen },
   { href: "/shopping", label: "Shopping", Icon: ShoppingCart },
   { href: "/pantry", label: "Pantry", Icon: Package },
+  { href: "/settings", label: "Settings", Icon: Settings },
 ];
 
 export default function NavBar() {
@@ -26,19 +27,19 @@ export default function NavBar() {
             >
               <div
                 className={cn(
-                  "flex items-center justify-center w-12 h-7 rounded-full transition-colors",
+                  "flex items-center justify-center w-10 h-7 rounded-full transition-colors",
                   active ? "bg-indigo-50" : ""
                 )}
               >
                 <Icon
-                  size={20}
+                  size={18}
                   strokeWidth={active ? 2.5 : 1.75}
                   className={active ? "text-indigo-600" : "text-gray-400"}
                 />
               </div>
               <span
                 className={cn(
-                  "text-[11px] font-medium transition-colors",
+                  "text-[10px] font-medium transition-colors",
                   active ? "text-indigo-600" : "text-gray-400"
                 )}
               >

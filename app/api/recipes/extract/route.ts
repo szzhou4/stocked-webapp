@@ -6,6 +6,7 @@ import {
   extractIngredientsFromImage,
   categorizeIngredients,
 } from "@/lib/claude/extract";
+import { DEFAULT_SETTINGS } from "@/app/api/settings/route";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -14,6 +15,14 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const { url, text, imageBase64, imageMediaType } = body;
+
+  // Fetch user's store descriptions for categorization
+  const { data: settingsRow } = await supabase
+    .from("user_settings")
+    .select("settings")
+    .eq("user_id", user.id)
+    .single();
+  const storeDescriptions = settingsRow?.settings?.stores ?? DEFAULT_SETTINGS.stores;
 
   try {
     let ingredients;
@@ -27,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Provide url, text, or imageBase64" }, { status: 400 });
     }
 
-    const categorized = await categorizeIngredients(ingredients);
+    const categorized = await categorizeIngredients(ingredients, storeDescriptions);
     return NextResponse.json({ ingredients: categorized });
   } catch (err) {
     console.error("Extract error:", err);
