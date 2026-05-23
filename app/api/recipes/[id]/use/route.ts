@@ -83,40 +83,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     depleted.push(ing.name);
 
     if (newQty <= (match.min_quantity ?? 0)) {
-      lowItems.push(match.id);
-    }
-  }
-
-  // Auto-add low items to shopping list (avoid duplicates)
-  for (const pantryItemId of lowItems) {
-    const item = pantryItems?.find((p) => p.id === pantryItemId);
-    if (!item) continue;
-
-    const { data: existing } = await supabase
-      .from("shopping_items")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("pantry_item_id", pantryItemId)
-      .eq("checked", false)
-      .maybeSingle();
-
-    if (!existing) {
-      await supabase.from("shopping_items").insert({
-        user_id: user.id,
-        name: item.name,
-        quantity: item.min_quantity || null,
-        unit: item.unit,
-        store: item.store,
-        category: item.category,
-        pantry_item_id: pantryItemId,
-      });
+      lowItems.push(match.name);
     }
   }
 
   return NextResponse.json({
     success: true,
     depleted_count: depleted.length,
-    low_items_count: lowItems.length,
+    low_items: lowItems,        // names of items now running low
     skipped_count: skipped.length,
     skipped_names: skipped,
   });

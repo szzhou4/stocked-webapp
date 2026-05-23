@@ -149,7 +149,7 @@ export default function RecipeDetailPage() {
     const data = await res.json();
     const parts: string[] = [];
     if (data.depleted_count > 0) parts.push(`${data.depleted_count} pantry item${data.depleted_count !== 1 ? "s" : ""} updated`);
-    if (data.low_items_count > 0) parts.push(`${data.low_items_count} low item${data.low_items_count !== 1 ? "s" : ""} added to shopping list`);
+    if (data.low_items?.length > 0) parts.push(`⚠️ Running low: ${data.low_items.join(", ")} — add to your shopping list from the Pantry tab`);
     if (data.skipped_count > 0) parts.push(`${data.skipped_count} skipped (unit mismatch: ${data.skipped_names.join(", ")})`);
     setMessage(`Cooked! ${parts.length ? parts.join(" · ") : "No pantry items matched."}`);
     await load(); // refresh pantry readiness
