@@ -59,6 +59,11 @@ export default function NewRecipePage() {
       if (!res.ok) throw new Error(data.error || "Extraction failed");
       setIngredients(data.ingredients);
 
+      // Pre-select Claude-suggested tags
+      if (data.suggestedTags?.length) {
+        setSelectedTags(data.suggestedTags);
+      }
+
       // Auto-fill name from URL
       if (mode === "url" && !name) {
         try {

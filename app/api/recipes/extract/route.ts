@@ -5,6 +5,7 @@ import {
   extractIngredientsFromText,
   extractIngredientsFromImage,
   categorizeIngredients,
+  suggestTags,
 } from "@/lib/claude/extract";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
     .single();
   const storeDescriptions = settingsRow?.settings?.stores ?? DEFAULT_SETTINGS.stores;
   const skipIngredients: string[] = settingsRow?.settings?.skipIngredients ?? DEFAULT_SETTINGS.skipIngredients;
+  const recipeTags: string[] = settingsRow?.settings?.recipeTags ?? DEFAULT_SETTINGS.recipeTags;
 
   try {
     let ingredients;
@@ -37,8 +39,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Provide url, text, or imageBase64" }, { status: 400 });
     }
 
-    const categorized = await categorizeIngredients(ingredients, storeDescriptions);
-    return NextResponse.json({ ingredients: categorized });
+    const [categorized, suggestedTags] = await Promise.all([
+      categorizeIngredients(ingredients, storeDescriptions),
+      suggestTags(ingredients, recipeTags),
+    ]);
+    return NextResponse.json({ ingredients: categorized, suggestedTags });
   } catch (err) {
     console.error("Extract error:", err);
     return NextResponse.json({ error: "Extraction failed" }, { status: 500 });

@@ -109,6 +109,31 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
   );
 }
 
+export async function suggestTags(
+  ingredients: ExtractedIngredient[],
+  availableTags: string[],
+): Promise<string[]> {
+  if (!availableTags.length) return [];
+  const ingredientList = ingredients.map((i) => i.name).join(", ");
+  const message = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 256,
+    messages: [{
+      role: "user",
+      content: `Based on these recipe ingredients: ${ingredientList}\n\nSelect all relevant tags from this list: ${availableTags.join(", ")}\n\nReturn only a JSON array of matching tag strings. Only include tags that clearly apply (e.g. "Asian" if ingredients suggest an Asian dish, "Vegetarian" if no meat/fish). Return [] if none fit well. Only return the JSON array, no other text.`,
+    }],
+  });
+  const raw = (message.content[0] as { type: string; text: string }).text.trim();
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return [];
+  try {
+    const suggested: string[] = JSON.parse(jsonMatch[0]);
+    return suggested.filter((t) => availableTags.includes(t));
+  } catch {
+    return [];
+  }
+}
+
 export async function categorizeIngredients(
   ingredients: ExtractedIngredient[],
   storeDescriptions?: Record<string, { name: string; description: string }>
