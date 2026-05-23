@@ -26,9 +26,11 @@ export function getStoreColor(store: string): string {
 }
 
 export const UNITS = [
-  "cups", "tbsp", "tsp",
+  // Volume
+  "cups", "tbsp", "tsp", "fl oz", "ml", "L",
+  // Weight (oz = dry ounces)
   "oz", "lbs", "g", "kg",
-  "ml", "L",
+  // Count
   "cloves", "slices", "pieces", "loaves", "cans", "bags", "bunches",
   "unit",
 ] as const;

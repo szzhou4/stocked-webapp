@@ -12,7 +12,15 @@ const UNIT_ALIASES: Record<string, string> = {
   cup: "cups",
   milliliter: "ml",  milliliters: "ml", millilitre: "ml", millilitres: "ml",
   liter: "L",        liters: "L",       litre: "L",       litres: "L",
-  // Weight
+  // Fluid ounces (volume) — distinct from dry oz (weight)
+  "fl oz": "fl oz",
+  "fluid oz": "fl oz",
+  "fluid ounce": "fl oz",
+  "fluid ounces": "fl oz",
+  "fl. oz.": "fl oz",
+  "fl. oz": "fl oz",
+  "fl oz.": "fl oz",
+  // Weight — "oz" / "ounce" always means dry weight ounces
   ounce: "oz",  ounces: "oz",
   pound: "lbs", pounds: "lbs",
   gram: "g",    grams: "g",
@@ -38,10 +46,11 @@ export function normalizeUnit(unit: string | null | undefined): string | null {
 // Conversion factors to canonical units (all keys lowercase)
 // Volume → ml
 const TO_ML: Record<string, number> = {
-  tsp: 5,        // ~4.93, rounded for cooking
-  tbsp: 15,      // ~14.79, rounded
-  cup: 240,      // ~236.6, rounded
+  tsp: 5,         // ~4.93, rounded for cooking
+  tbsp: 15,       // ~14.79, rounded
+  cup: 240,       // ~236.6, rounded
   cups: 240,
+  "fl oz": 29.574, // 1 fluid ounce = 29.5735 ml
   ml: 1,
   l: 1000,
 };

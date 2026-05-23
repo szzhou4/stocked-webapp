@@ -1,7 +1,97 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { normalizeUnit } from "@/lib/units";
+import { normalizeUnit, unitsCompatible, convertUnit } from "@/lib/units";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+/**
+ * Try to pull recipe ingredients from JSON-LD structured data in the page HTML.
+ * Returns an array of raw ingredient strings (e.g. "1 lb flank steak") or null
+ * if no Recipe schema is found.
+ */
+function extractRecipeJsonLd(html: string): string[] | null {
+  const scriptRe = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  for (const match of html.matchAll(scriptRe)) {
+    try {
+      const json = JSON.parse(match[1]) as Record<string, unknown>;
+      // Collect all Recipe-typed objects (may be nested in @graph)
+      const candidates: Record<string, unknown>[] = [];
+      if (Array.isArray(json["@graph"])) {
+        for (const node of json["@graph"] as Record<string, unknown>[]) {
+          const t = node["@type"];
+          if (t === "Recipe" || (Array.isArray(t) && t.includes("Recipe"))) {
+            candidates.push(node);
+          }
+        }
+      }
+      const rootType = json["@type"];
+      if (rootType === "Recipe" || (Array.isArray(rootType) && rootType.includes("Recipe"))) {
+        candidates.push(json);
+      }
+      for (const recipe of candidates) {
+        const ings = recipe["recipeIngredient"];
+        if (Array.isArray(ings) && ings.length > 0) {
+          return (ings as unknown[]).map(String).filter((s) => s.trim());
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Merge duplicate ingredients (same name, case-insensitive) that appear in
+ * multiple recipe sections. Compatible units are summed; individual amounts
+ * are recorded in the notes field.
+ */
+function deduplicateIngredients(ingredients: ExtractedIngredient[]): ExtractedIngredient[] {
+  const indexByName = new Map<string, number>(); // normalized name → index in result
+  const result: ExtractedIngredient[] = [];
+
+  for (const ing of ingredients) {
+    const key = ing.name.toLowerCase().trim();
+    const existingIdx = indexByName.get(key);
+
+    if (existingIdx === undefined) {
+      indexByName.set(key, result.length);
+      result.push({ ...ing });
+      continue;
+    }
+
+    const existing = result[existingIdx];
+
+    // Can't merge if either lacks a quantity
+    if (existing.quantity === null || ing.quantity === null) continue;
+    // Can't merge if units are incompatible
+    if (!unitsCompatible(existing.unit, ing.unit)) continue;
+
+    // Convert ing quantity to existing unit if needed
+    let addQty = ing.quantity;
+    if (ing.unit && existing.unit && ing.unit.toLowerCase() !== existing.unit.toLowerCase()) {
+      const converted = convertUnit(ing.quantity, ing.unit, existing.unit);
+      if (converted === null) continue;
+      addQty = converted;
+    }
+
+    const totalQty = Math.round((existing.quantity + addQty) * 1000) / 1000;
+
+    // Build a note that shows the breakdown (e.g. "1 tbsp (marinade) · 2 tbsp (sauce)")
+    const fmtExisting = `${existing.quantity} ${existing.unit ?? ""}`.trim() +
+      (existing.notes ? ` (${existing.notes})` : "");
+    const fmtNew = `${ing.quantity} ${ing.unit ?? ""}`.trim() +
+      (ing.notes ? ` (${ing.notes})` : "");
+    const mergedNotes = `${fmtExisting} · ${fmtNew}`;
+
+    result[existingIdx] = {
+      ...existing,
+      quantity: totalQty,
+      notes: mergedNotes,
+    };
+  }
+
+  return result;
+}
 
 const SKIP_INGREDIENTS = [
   "water", "salt", "pepper", "black pepper", "white pepper", "kosher salt",
@@ -44,13 +134,21 @@ function buildStoreString(storeDescriptions?: Record<string, { name: string; des
 
 const CATEGORIES = `produce, dairy, meat/seafood, grains/dry, canned/jarred, frozen, condiments/sauces, baking, beverages, snacks, other`;
 
+const EXTRACT_PROMPT = `Extract ALL ingredients from this recipe, including every section (marinade, sauce, batter, topping, etc.). Return a JSON array of objects with these fields:
+- name: string (ingredient name only, no quantities)
+- quantity: number or null
+- unit: string or null — use ONLY these short forms: "cups", "tbsp", "tsp", "fl oz" (fluid/liquid ounces), "oz" (dry weight ounces only), "lbs", "g", "kg", "ml", "L", "cloves", "cans", "slices", "pieces", or null if no unit. IMPORTANT: use "fl oz" for liquid volume (e.g. soy sauce, broth), "oz" only for solid weight.
+- notes: string or null — include prep notes ("chopped", "room temperature"), packaging context ("1 can (14 oz)", "1 block"), AND which section it belongs to if there are multiple sections (e.g. "for marinade", "for sauce")
+
+Omit water, salt, pepper, and their common variations. Only return the JSON array, no other text.`;
+
 export async function extractIngredientsFromText(text: string, skipIngredients?: string[]): Promise<ExtractedIngredient[]> {
   const message = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1024,
     messages: [{
       role: "user",
-      content: `Extract all ingredients from this recipe text. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null, use short forms: "cups", "tbsp", "tsp", "oz", "lbs", "g", "kg", "ml", "cloves", "cans", "slices", or null if no unit), notes (string or null — include preparation notes like "chopped" or "room temperature", AND packaging context like "1 can", "1 block (14 oz)", "about 3 medium"). Omit basic pantry staples that every kitchen has: water, salt, pepper, and their common variations (kosher salt, black pepper, etc.). Only return the JSON array, no other text.\n\nRecipe text:\n${text}`,
+      content: `${EXTRACT_PROMPT}\n\nRecipe text:\n${text}`,
     }],
   });
 
@@ -58,10 +156,11 @@ export async function extractIngredientsFromText(text: string, skipIngredients?:
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
   const parsed: ExtractedIngredient[] = JSON.parse(jsonMatch[0]);
-  return filterBasicIngredients(
+  const filtered = filterBasicIngredients(
     parsed.map((i) => ({ ...i, unit: normalizeUnit(i.unit) })),
     skipIngredients,
   );
+  return deduplicateIngredients(filtered);
 }
 
 export async function extractIngredientsFromUrl(url: string, skipIngredients?: string[]): Promise<ExtractedIngredient[]> {
@@ -69,7 +168,15 @@ export async function extractIngredientsFromUrl(url: string, skipIngredients?: s
     headers: { "User-Agent": "Mozilla/5.0 (compatible; Stocked/1.0)" },
   });
   const html = await res.text();
-  // Strip scripts/styles, keep text
+
+  // Prefer structured JSON-LD data — it already has clean ingredient strings
+  // and won't lose quantities due to HTML formatting
+  const jsonLdIngredients = extractRecipeJsonLd(html);
+  if (jsonLdIngredients && jsonLdIngredients.length > 0) {
+    return extractIngredientsFromText(jsonLdIngredients.join("\n"), skipIngredients);
+  }
+
+  // Fallback: strip tags and pass plain text
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -93,7 +200,7 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
         },
         {
           type: "text",
-          text: `Extract all ingredients from this recipe image. Return a JSON array of objects with fields: name (string), quantity (number or null), unit (string or null, use short forms: "cups", "tbsp", "tsp", "oz", "lbs", "g", "kg", "ml", "cloves", "cans", "slices", or null), notes (string or null — include prep notes like "chopped" AND packaging context like "1 can", "1 block (14 oz)", "about 3 medium"). Omit basic pantry staples: water, salt, pepper, and their variations. Only return the JSON array, no other text.`,
+          text: EXTRACT_PROMPT,
         },
       ],
     }],
@@ -103,10 +210,11 @@ export async function extractIngredientsFromImage(base64Image: string, mediaType
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("No JSON array found in response");
   const parsed: ExtractedIngredient[] = JSON.parse(jsonMatch[0]);
-  return filterBasicIngredients(
+  const filtered = filterBasicIngredients(
     parsed.map((i) => ({ ...i, unit: normalizeUnit(i.unit) })),
     skipIngredients,
   );
+  return deduplicateIngredients(filtered);
 }
 
 export async function suggestTags(
