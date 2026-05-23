@@ -101,8 +101,9 @@ const slides: Slide[] = [
           any time.
         </p>
         <p>
-          Check items off as you shop. When you tap <strong className="text-gray-700">Checkout</strong>,
-          everything purchased moves to your pantry — no double-entry needed.
+          Tap the circle next to each item as you pick it up. A quick confirmation
+          lets you adjust the amount you actually bought — then it moves straight
+          to your pantry automatically.
         </p>
         <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 text-xs text-amber-700 font-medium">
           Items are grouped by store so you can move through the aisles
@@ -136,10 +137,11 @@ const slides: Slide[] = [
 
 interface Props {
   onDismiss: () => void;
+  initialSlide?: number;
 }
 
-export default function OnboardingModal({ onDismiss }: Props) {
-  const [index, setIndex] = useState(0);
+export default function OnboardingModal({ onDismiss, initialSlide = 0 }: Props) {
+  const [index, setIndex] = useState(initialSlide);
   const isLast = index === slides.length - 1;
   const slide = slides[index];
 
