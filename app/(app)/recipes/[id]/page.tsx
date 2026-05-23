@@ -207,6 +207,7 @@ export default function RecipeDetailPage() {
   async function handleToggleArchive() {
     if (!recipe) return;
     const newArchived = !recipe.archived;
+    if (newArchived && !confirm("Archive this recipe? Archived recipes can be restored later.")) return;
     await fetch(`/api/recipes/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -220,7 +221,7 @@ export default function RecipeDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this recipe?")) return;
+    if (!confirm("Delete this recipe? Deleted recipes cannot be restored.")) return;
     await fetch(`/api/recipes/${id}`, { method: "DELETE" });
     router.push("/recipes");
   }
