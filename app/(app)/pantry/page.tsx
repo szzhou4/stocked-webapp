@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Plus, X, AlertTriangle, Minus, ShoppingCart, Check } from "lucide-react";
-import type { PantryItem } from "@/lib/types";
+import type { PantryItem, ShoppingItem } from "@/lib/types";
 import { STORE_LABELS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
+import { unitsCompatible, convertUnit } from "@/lib/units";
 
 function UnitSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   const isCustom = value && !UNITS.includes(value as typeof UNITS[number]);
@@ -30,20 +31,35 @@ async function deleteItem(id: string) {
   });
 }
 
+function namesMatch(a: string, b: string): boolean {
+  const al = a.toLowerCase(), bl = b.toLowerCase();
+  return al.includes(bl) || bl.includes(al);
+}
+
 export default function PantryPage() {
   const [items, setItems] = useState<PantryItem[]>([]);
+  const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+
+  // Use modal state
   const [useModal, setUseModal] = useState<PantryItem | null>(null);
   const [useAmount, setUseAmount] = useState("");
-  // "add to shopping list" fields shown when use would empty the item
   const [useAddToList, setUseAddToList] = useState(true);
   const [useListQty, setUseListQty] = useState("");
   const [useListUnit, setUseListUnit] = useState("");
   const [useListStore, setUseListStore] = useState("");
   const [useListCategory, setUseListCategory] = useState("");
+
+  // Add-to-list modal state (for low-stock "Add to list" button)
+  const [addListModal, setAddListModal] = useState<PantryItem | null>(null);
+  const [addListQty, setAddListQty] = useState("");
+  const [addListUnit, setAddListUnit] = useState("");
+  const [addListStore, setAddListStore] = useState("");
+  const [addListCategory, setAddListCategory] = useState("");
+
   // Tracks item IDs where "Add to list" was just tapped (for brief confirmation)
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
@@ -60,12 +76,14 @@ export default function PantryPage() {
   const allStores = { ...STORE_LABELS, ...Object.fromEntries(Object.entries(userStores).map(([k, v]) => [k, v.name])) };
 
   async function load() {
-    const [pantryRes, settingsRes] = await Promise.all([
+    const [pantryRes, settingsRes, shoppingRes] = await Promise.all([
       fetch("/api/pantry"),
       fetch("/api/settings"),
+      fetch("/api/shopping"),
     ]);
     const pantryData = await pantryRes.json();
     const settingsData = await settingsRes.json();
+    const shoppingData = await shoppingRes.json();
     const allItems: PantryItem[] = pantryData.items || [];
 
     // Auto-clean any zero-quantity items left over from previous sessions
@@ -73,6 +91,7 @@ export default function PantryPage() {
     await Promise.all(zeros.map((i) => deleteItem(i.id)));
     setItems(allItems.filter((i) => i.quantity > 0));
 
+    setShoppingItems(shoppingData.items || []);
     if (settingsData.settings) setSettings(settingsData.settings);
     setLoading(false);
   }
@@ -99,7 +118,6 @@ export default function PantryPage() {
     const newQty = parseFloat(vals.quantity) || 0;
 
     if (newQty <= 0) {
-      // Quantity edited to 0 — remove from pantry
       await deleteItem(item.id);
       setEditing(null);
       await load();
@@ -156,6 +174,43 @@ export default function PantryPage() {
     setUseAmount("");
   }
 
+  /** Add qty to an existing unchecked shopping item (merging units if compatible), or POST a new one. */
+  async function addOrMergeShoppingItem(
+    name: string,
+    qty: number | null,
+    unit: string | null,
+    store: string,
+    category: string,
+  ) {
+    const existing = shoppingItems.find(
+      (s) => !s.checked && !s.saved_for_later && namesMatch(name, s.name)
+    );
+
+    if (existing && unitsCompatible(unit, existing.unit)) {
+      // Same unit family — merge quantities
+      let addQty = qty ?? 0;
+      if (qty && unit && existing.unit && unit.toLowerCase() !== existing.unit.toLowerCase()) {
+        const converted = convertUnit(qty, unit, existing.unit);
+        if (converted !== null) addQty = converted;
+      }
+      const newQty = existing.quantity !== null
+        ? Math.round((existing.quantity + addQty) * 1000) / 1000
+        : (addQty || null);
+      await fetch("/api/shopping", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: existing.id, quantity: newQty }),
+      });
+    } else {
+      // No compatible match — add new item
+      await fetch("/api/shopping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, quantity: qty, unit, store, category }),
+      });
+    }
+  }
+
   async function handleUse() {
     if (!useModal) return;
     const amount = parseFloat(useAmount);
@@ -165,17 +220,13 @@ export default function PantryPage() {
     if (newQty <= 0) {
       await deleteItem(useModal.id);
       if (useAddToList) {
-        await fetch("/api/shopping", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: useModal.name,
-            quantity: parseFloat(useListQty) || null,
-            unit: useListUnit || null,
-            store: useListStore,
-            category: useListCategory,
-          }),
-        });
+        await addOrMergeShoppingItem(
+          useModal.name,
+          parseFloat(useListQty) || null,
+          useListUnit || null,
+          useListStore,
+          useListCategory,
+        );
       }
     } else {
       await fetch("/api/pantry", {
@@ -194,23 +245,37 @@ export default function PantryPage() {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
 
-  async function addToShoppingList(item: PantryItem) {
-    await fetch("/api/shopping", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: item.name,
-        quantity: null,
-        unit: item.unit || null,
-        store: item.store,
-        category: item.category,
-      }),
-    });
-    // Brief "Added!" confirmation
-    setAddedIds((prev) => new Set([...prev, item.id]));
+  function openAddListModal(item: PantryItem) {
+    setAddListModal(item);
+    setAddListQty("");
+    setAddListUnit(item.unit || "");
+    setAddListStore(item.store);
+    setAddListCategory(item.category);
+  }
+
+  function closeAddListModal() {
+    setAddListModal(null);
+    setAddListQty("");
+  }
+
+  async function confirmAddToList() {
+    if (!addListModal) return;
+    const qty = parseFloat(addListQty) || null;
+    const unit = addListUnit || null;
+
+    await addOrMergeShoppingItem(
+      addListModal.name, qty, unit, addListStore, addListCategory
+    );
+
+    // Flash "Added!" on the item card
+    const itemId = addListModal.id;
+    setAddedIds((prev) => new Set([...prev, itemId]));
     setTimeout(() => {
-      setAddedIds((prev) => { const n = new Set(prev); n.delete(item.id); return n; });
+      setAddedIds((prev) => { const n = new Set(prev); n.delete(itemId); return n; });
     }, 2000);
+
+    closeAddListModal();
+    await load();
   }
 
   const grouped = items.reduce((acc, item) => {
@@ -324,6 +389,9 @@ export default function PantryPage() {
               const isEditing = editing === item.id;
               const ev = editValues[item.id];
               const justAdded = addedIds.has(item.id);
+              const isOnList = shoppingItems.some(
+                (s) => !s.checked && !s.saved_for_later && namesMatch(item.name, s.name)
+              );
               return (
                 <div
                   key={item.id}
@@ -331,13 +399,18 @@ export default function PantryPage() {
                 >
                   {/* Main row */}
                   <div className="flex items-center justify-between px-3 pt-3 pb-2">
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-sm">{item.name}</span>
-                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${getStoreColor(item.store)}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${getStoreColor(item.store)}`}>
                         {getStoreLabel(item.store, userStores)}
                       </span>
+                      {isOnList && (
+                        <span className="flex items-center gap-0.5 text-[10px] font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">
+                          <ShoppingCart size={9} /> On list
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       {!isEditing && (
                         <button
                           onClick={() => openUseModal(item)}
@@ -423,7 +496,7 @@ export default function PantryPage() {
                             </span>
                           </div>
                           <button
-                            onClick={() => addToShoppingList(item)}
+                            onClick={() => openAddListModal(item)}
                             disabled={justAdded}
                             className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0 ${
                               justAdded
@@ -568,6 +641,93 @@ export default function PantryPage() {
                   className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                 >
                   {willEmpty && useAddToList ? "Remove & add to list" : "Mark as used"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Add-to-list modal (for low-stock "Add to list" button) */}
+      {addListModal && (() => {
+        const alreadyOnList = shoppingItems.some(
+          (s) => !s.checked && !s.saved_for_later && namesMatch(addListModal.name, s.name)
+        );
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm space-y-4 p-6">
+              <div>
+                <h3 className="font-semibold text-lg">Add to shopping list</h3>
+                <p className="text-gray-500 text-sm">
+                  {addListModal.name} · {formatQuantity(addListModal.quantity, addListModal.unit)} on hand
+                </p>
+              </div>
+
+              {/* Qty + Unit */}
+              <div>
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">How much to buy?</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={addListQty}
+                    onChange={(e) => setAddListQty(e.target.value)}
+                    placeholder="—"
+                    min={0}
+                    step={0.5}
+                    autoFocus
+                    className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <UnitSelect
+                    value={addListUnit}
+                    onChange={setAddListUnit}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+
+              {/* Store */}
+              <div>
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Store</label>
+                <select
+                  value={addListStore}
+                  onChange={(e) => setAddListStore(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {Object.entries(allStores).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Category</label>
+                <select
+                  value={addListCategory}
+                  onChange={(e) => setAddListCategory(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              {/* Already-on-list notice */}
+              {alreadyOnList && (
+                <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2">
+                  Already on your shopping list — quantity will be increased.
+                </p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={closeAddListModal}
+                  className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmAddToList}
+                  className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors"
+                >
+                  {alreadyOnList ? "Update list" : "Add to list"}
                 </button>
               </div>
             </div>
