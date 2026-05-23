@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X, AlertTriangle, Minus, ShoppingCart } from "lucide-react";
+import { Plus, X, AlertTriangle, Minus, ShoppingCart, Check } from "lucide-react";
 import type { PantryItem } from "@/lib/types";
 import { STORE_LABELS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
-// Fix: always use actual value so custom units (e.g. "teaspoon") display correctly
 function UnitSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   const isCustom = value && !UNITS.includes(value as typeof UNITS[number]);
   return (
@@ -23,6 +22,14 @@ function UnitSelect({ value, onChange, className }: { value: string; onChange: (
   );
 }
 
+async function deleteItem(id: string) {
+  await fetch("/api/pantry", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+}
+
 export default function PantryPage() {
   const [items, setItems] = useState<PantryItem[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
@@ -31,11 +38,14 @@ export default function PantryPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [useModal, setUseModal] = useState<PantryItem | null>(null);
   const [useAmount, setUseAmount] = useState("");
+  // Tracks item IDs where "Add to list" was just tapped (for brief confirmation)
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+
+  // Default min = 3 so new items get a sensible low-stock threshold
   const [newItem, setNewItem] = useState({
-    name: "", quantity: "", unit: "", min_quantity: "", category: "other", store: "generic",
+    name: "", quantity: "", unit: "", min_quantity: "3", category: "other", store: "generic",
   });
 
-  // Inline edit state (controlled, replaces onBlur approach)
   const [editValues, setEditValues] = useState<Record<string, {
     quantity: string; min_quantity: string; unit: string; category: string; store: string;
   }>>({});
@@ -50,7 +60,13 @@ export default function PantryPage() {
     ]);
     const pantryData = await pantryRes.json();
     const settingsData = await settingsRes.json();
-    setItems(pantryData.items || []);
+    const allItems: PantryItem[] = pantryData.items || [];
+
+    // Auto-clean any zero-quantity items left over from previous sessions
+    const zeros = allItems.filter((i) => i.quantity <= 0);
+    await Promise.all(zeros.map((i) => deleteItem(i.id)));
+    setItems(allItems.filter((i) => i.quantity > 0));
+
     if (settingsData.settings) setSettings(settingsData.settings);
     setLoading(false);
   }
@@ -74,12 +90,22 @@ export default function PantryPage() {
   async function saveEdit(item: PantryItem) {
     const vals = editValues[item.id];
     if (!vals) return;
+    const newQty = parseFloat(vals.quantity) || 0;
+
+    if (newQty <= 0) {
+      // Quantity edited to 0 — remove from pantry
+      await deleteItem(item.id);
+      setEditing(null);
+      await load();
+      return;
+    }
+
     await fetch("/api/pantry", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: item.id,
-        quantity: parseFloat(vals.quantity) || 0,
+        quantity: newQty,
         min_quantity: parseFloat(vals.min_quantity) || 0,
         unit: vals.unit || null,
         category: vals.category,
@@ -99,12 +125,12 @@ export default function PantryPage() {
         name: newItem.name.trim(),
         quantity: parseFloat(newItem.quantity) || 0,
         unit: newItem.unit || null,
-        min_quantity: parseFloat(newItem.min_quantity) || 0,
+        min_quantity: parseFloat(newItem.min_quantity) ?? 3,
         category: newItem.category,
         store: newItem.store || settings.defaultStore,
       }),
     });
-    setNewItem({ name: "", quantity: "", unit: "", min_quantity: "", category: "other", store: settings.defaultStore });
+    setNewItem({ name: "", quantity: "", unit: "", min_quantity: "3", category: "other", store: settings.defaultStore });
     setAdding(false);
     await load();
   }
@@ -113,12 +139,17 @@ export default function PantryPage() {
     if (!useModal) return;
     const amount = parseFloat(useAmount);
     if (!amount || amount <= 0) return;
-    const newQty = Math.max(0, useModal.quantity - amount);
-    await fetch("/api/pantry", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: useModal.id, quantity: newQty }),
-    });
+    const newQty = Math.max(0, Math.round((useModal.quantity - amount) * 1000) / 1000);
+
+    if (newQty <= 0) {
+      await deleteItem(useModal.id);
+    } else {
+      await fetch("/api/pantry", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: useModal.id, quantity: newQty }),
+      });
+    }
     setUseModal(null);
     setUseAmount("");
     await load();
@@ -126,11 +157,7 @@ export default function PantryPage() {
 
   async function handleDelete(id: string) {
     if (!confirm("Remove from pantry?")) return;
-    await fetch("/api/pantry", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    await deleteItem(id);
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
 
@@ -146,6 +173,11 @@ export default function PantryPage() {
         category: item.category,
       }),
     });
+    // Brief "Added!" confirmation
+    setAddedIds((prev) => new Set([...prev, item.id]));
+    setTimeout(() => {
+      setAddedIds((prev) => { const n = new Set(prev); n.delete(item.id); return n; });
+    }, 2000);
   }
 
   const grouped = items.reduce((acc, item) => {
@@ -173,12 +205,21 @@ export default function PantryPage() {
         </button>
       </div>
 
+      {/* Low-stock summary banner */}
       {lowItems.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2">
-          <AlertTriangle size={16} className="text-amber-500 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">Running low</p>
-            <p className="text-xs text-amber-600">{lowItems.map((i) => i.name).join(", ")}</p>
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-5">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle size={15} className="text-amber-500 shrink-0" />
+            <p className="text-sm font-semibold text-amber-800">
+              {lowItems.length} item{lowItems.length !== 1 ? "s" : ""} running low
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {lowItems.map((i) => (
+              <span key={i.id} className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                {i.name}
+              </span>
+            ))}
           </div>
         </div>
       )}
@@ -201,8 +242,8 @@ export default function PantryPage() {
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-0.5 block">Min</label>
-              <input type="number" placeholder="0" value={newItem.min_quantity}
+              <label className="text-xs text-gray-500 mb-0.5 block">Min (alert)</label>
+              <input type="number" placeholder="3" value={newItem.min_quantity}
                 onChange={(e) => setNewItem((p) => ({ ...p, min_quantity: e.target.value }))}
                 className="w-full border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
@@ -249,9 +290,14 @@ export default function PantryPage() {
               const isLow = item.quantity <= item.min_quantity && item.min_quantity > 0;
               const isEditing = editing === item.id;
               const ev = editValues[item.id];
+              const justAdded = addedIds.has(item.id);
               return (
-                <div key={item.id} className={`bg-white border rounded-xl p-3 ${isLow ? "border-amber-300" : ""}`}>
-                  <div className="flex items-center justify-between">
+                <div
+                  key={item.id}
+                  className={`bg-white border rounded-xl overflow-hidden ${isLow ? "border-amber-400" : "border-gray-200"}`}
+                >
+                  {/* Main row */}
+                  <div className="flex items-center justify-between px-3 pt-3 pb-2">
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-sm">{item.name}</span>
                       <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${getStoreColor(item.store)}`}>
@@ -279,8 +325,9 @@ export default function PantryPage() {
                     </div>
                   </div>
 
+                  {/* Edit form */}
                   {isEditing && ev ? (
-                    <div className="mt-3 space-y-2">
+                    <div className="px-3 pb-3 space-y-2">
                       <div className="grid grid-cols-3 gap-2">
                         <div>
                           <label className="text-[10px] text-gray-400 uppercase tracking-wide">Have</label>
@@ -290,7 +337,7 @@ export default function PantryPage() {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-gray-400 uppercase tracking-wide">Min</label>
+                          <label className="text-[10px] text-gray-400 uppercase tracking-wide">Min (alert)</label>
                           <input type="number" value={ev.min_quantity}
                             onChange={(e) => setEditValues((p) => ({ ...p, [item.id]: { ...p[item.id], min_quantity: e.target.value } }))}
                             className="w-full border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
@@ -321,29 +368,44 @@ export default function PantryPage() {
                           </select>
                         </div>
                       </div>
-                      <p className="text-[11px] text-gray-400">Min triggers low-stock alert &amp; auto-adds to shopping list</p>
+                      <p className="text-[11px] text-gray-400">Setting quantity to 0 will remove this item from pantry.</p>
                     </div>
                   ) : (
-                    <div className="mt-1.5 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        {isLow && (
-                          <span className="flex items-center gap-1 text-xs font-medium text-amber-600">
-                            <AlertTriangle size={12} /> Running low
-                          </span>
-                        )}
+                    <>
+                      {/* Quantity row */}
+                      <div className="px-3 pb-2">
                         <span className="text-xs text-gray-500">
                           {formatQuantity(item.quantity, item.unit)} on hand
                         </span>
                       </div>
+
+                      {/* Low-stock alert strip */}
                       {isLow && (
-                        <button
-                          onClick={() => addToShoppingList(item)}
-                          className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-full transition-colors"
-                        >
-                          <ShoppingCart size={11} /> Add to list
-                        </button>
+                        <div className="bg-amber-50 border-t border-amber-200 px-3 py-2.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                            <span className="text-sm font-semibold text-amber-800">Running low</span>
+                            <span className="text-xs text-amber-600 truncate">
+                              · min is {formatQuantity(item.min_quantity, item.unit)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => addToShoppingList(item)}
+                            disabled={justAdded}
+                            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0 ${
+                              justAdded
+                                ? "bg-green-500 text-white"
+                                : "bg-amber-500 hover:bg-amber-600 text-white"
+                            }`}
+                          >
+                            {justAdded
+                              ? <><Check size={12} /> Added!</>
+                              : <><ShoppingCart size={12} /> Add to list</>
+                            }
+                          </button>
+                        </div>
                       )}
-                    </div>
+                    </>
                   )}
                 </div>
               );
@@ -379,7 +441,10 @@ export default function PantryPage() {
               </div>
               {useAmount && parseFloat(useAmount) > 0 && (
                 <p className="text-xs text-gray-400 mt-1">
-                  Remaining: {formatQuantity(Math.max(0, useModal.quantity - parseFloat(useAmount)), useModal.unit)}
+                  {Math.max(0, useModal.quantity - parseFloat(useAmount)) <= 0
+                    ? "This will remove the item from your pantry."
+                    : `Remaining: ${formatQuantity(Math.max(0, useModal.quantity - parseFloat(useAmount)), useModal.unit)}`
+                  }
                 </p>
               )}
             </div>

@@ -75,16 +75,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Round to 3 decimal places (matches DB numeric(10,3))
     const newQty = Math.max(0, Math.round((match.quantity - qtyToSubtract) * 1000) / 1000);
 
-    await supabase
-      .from("pantry_items")
-      .update({ quantity: newQty })
-      .eq("id", match.id);
+    if (newQty <= 0) {
+      // Fully depleted — remove from pantry entirely
+      await supabase.from("pantry_items").delete().eq("id", match.id);
+    } else {
+      await supabase.from("pantry_items").update({ quantity: newQty }).eq("id", match.id);
+      if (newQty <= (match.min_quantity ?? 0)) {
+        lowItems.push(match.name);
+      }
+    }
 
     depleted.push(ing.name);
-
-    if (newQty <= (match.min_quantity ?? 0)) {
-      lowItems.push(match.name);
-    }
   }
 
   return NextResponse.json({
