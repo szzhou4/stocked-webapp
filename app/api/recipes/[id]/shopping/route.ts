@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { categorizeIngredients } from "@/lib/claude/extract";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
+import { unitsCompatible, convertUnit } from "@/lib/units";
 
 function isBasicIngredient(name: string, skipList: string[]): boolean {
   const lower = name.toLowerCase().trim();
@@ -13,11 +14,6 @@ function isBasicIngredient(name: string, skipList: string[]): boolean {
 function namesMatch(a: string, b: string): boolean {
   const al = a.toLowerCase(), bl = b.toLowerCase();
   return al.includes(bl) || bl.includes(al);
-}
-
-function unitsCompatible(a: string | null, b: string | null): boolean {
-  if (!a || !b) return true;
-  return a.toLowerCase() === b.toLowerCase();
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -45,23 +41,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const skipIngredients: string[] = settingsRow?.settings?.skipIngredients ?? DEFAULT_SETTINGS.skipIngredients;
   const storeDescriptions = settingsRow?.settings?.stores ?? DEFAULT_SETTINGS.stores;
 
-  const toMerge: { existingId: string; addQty: number }[] = [];
+  type MergeEntry = { existingId: string; addQty: number; fromUnit: string | null; toUnit: string | null };
+  const toMerge: MergeEntry[] = [];
   const toInsert: typeof recipe.recipe_ingredients = [];
 
   for (const ing of recipe.recipe_ingredients) {
-    // Skip basic pantry staples (water, salt, pepper, etc.)
+    // Skip basic pantry staples
     if (isBasicIngredient(ing.name, skipIngredients)) continue;
 
     // Skip if pantry has it and it's well-stocked
     const pantryMatch = pantryItems?.find((p) => namesMatch(ing.name, p.name));
     if (pantryMatch && pantryMatch.quantity > pantryMatch.min_quantity) continue;
 
-    // Check if already in shopping list
+    // Check if already in shopping list — match by name AND compatible units
     const existing = existingItems?.find(
       (s) => namesMatch(ing.name, s.name) && unitsCompatible(ing.unit, s.unit)
     );
+
     if (existing) {
-      toMerge.push({ existingId: existing.id, addQty: ing.quantity ?? 0 });
+      toMerge.push({
+        existingId: existing.id,
+        addQty: ing.quantity ?? 0,
+        fromUnit: ing.unit ?? null,
+        toUnit: existing.unit ?? null,
+      });
     } else {
       toInsert.push(ing);
     }
@@ -71,11 +74,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ added: 0, message: "All ingredients are already in your shopping list or pantry" });
   }
 
-  // Merge quantities into existing shopping items
+  // Merge quantities into existing shopping items (with unit conversion)
   await Promise.all(
-    toMerge.map(({ existingId, addQty }) => {
+    toMerge.map(({ existingId, addQty, fromUnit, toUnit }) => {
       const existing = existingItems!.find((s) => s.id === existingId)!;
-      const newQty = addQty > 0 ? (existing.quantity ?? 0) + addQty : existing.quantity;
+
+      let qtyToAdd = addQty;
+      if (fromUnit && toUnit && fromUnit.toLowerCase() !== toUnit.toLowerCase()) {
+        const converted = convertUnit(addQty, fromUnit, toUnit);
+        if (converted !== null) qtyToAdd = converted;
+      }
+
+      // Round to 3 decimal places (matches DB numeric(10,3))
+      const newQty = qtyToAdd > 0
+        ? Math.round(((existing.quantity ?? 0) + qtyToAdd) * 1000) / 1000
+        : existing.quantity;
+
       return supabase.from("shopping_items").update({ quantity: newQty }).eq("id", existingId);
     })
   );

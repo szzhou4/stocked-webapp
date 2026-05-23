@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { scaleQuantity } from "@/lib/utils";
+import { unitsCompatible, convertUnit } from "@/lib/units";
+
+function namesMatch(a: string, b: string): boolean {
+  const al = a.toLowerCase(), bl = b.toLowerCase();
+  return al.includes(bl) || bl.includes(al);
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,28 +43,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .eq("user_id", user.id);
 
   const lowItems: string[] = [];
+  const depleted: string[] = [];
+  const skipped: string[] = []; // incompatible unit families
 
   for (const ing of recipe.recipe_ingredients) {
     const scaledQty = scaleQuantity(ing.quantity, scale);
     if (scaledQty === null) continue;
 
-    // Fuzzy match pantry item by name (case-insensitive contains)
-    const ingNameLower = ing.name.toLowerCase();
-    const match = pantryItems?.find((p) =>
-      p.name.toLowerCase().includes(ingNameLower) ||
-      ingNameLower.includes(p.name.toLowerCase())
-    );
+    // Fuzzy match pantry item by name
+    const match = pantryItems?.find((p) => namesMatch(ing.name, p.name));
+    if (!match) continue;
 
-    if (match) {
-      const newQty = Math.max(0, match.quantity - scaledQty);
-      await supabase
-        .from("pantry_items")
-        .update({ quantity: newQty })
-        .eq("id", match.id);
+    // Check unit compatibility — skip if different families (e.g. tbsp vs g)
+    if (!unitsCompatible(ing.unit, match.unit)) {
+      skipped.push(ing.name);
+      continue;
+    }
 
-      if (newQty <= match.min_quantity) {
-        lowItems.push(match.id);
+    // Convert ingredient qty to pantry unit if needed (same family, different unit)
+    let qtyToSubtract = scaledQty;
+    if (ing.unit && match.unit && ing.unit.toLowerCase() !== match.unit.toLowerCase()) {
+      const converted = convertUnit(scaledQty, ing.unit, match.unit);
+      if (converted === null) {
+        // Shouldn't happen after unitsCompatible check, but guard anyway
+        skipped.push(ing.name);
+        continue;
       }
+      qtyToSubtract = converted;
+    }
+
+    // Round to 3 decimal places (matches DB numeric(10,3))
+    const newQty = Math.max(0, Math.round((match.quantity - qtyToSubtract) * 1000) / 1000);
+
+    await supabase
+      .from("pantry_items")
+      .update({ quantity: newQty })
+      .eq("id", match.id);
+
+    depleted.push(ing.name);
+
+    if (newQty <= (match.min_quantity ?? 0)) {
+      lowItems.push(match.id);
     }
   }
 
@@ -88,5 +113,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   }
 
-  return NextResponse.json({ success: true, low_items_count: lowItems.length });
+  return NextResponse.json({
+    success: true,
+    depleted_count: depleted.length,
+    low_items_count: lowItems.length,
+    skipped_count: skipped.length,
+    skipped_names: skipped,
+  });
 }
