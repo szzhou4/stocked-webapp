@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { categorizeIngredients } from "@/lib/claude/extract";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
-import { unitsCompatible, convertUnit } from "@/lib/units";
+import { convertUnit } from "@/lib/units";
 
 function isBasicIngredient(name: string, skipList: string[]): boolean {
   const lower = name.toLowerCase().trim();
@@ -16,6 +16,35 @@ function namesMatch(a: string, b: string): boolean {
   return al.includes(bl) || bl.includes(al);
 }
 
+/** Mirror of client-side computeMissing: returns true if pantry doesn't cover the scaled need */
+function pantryCoversIngredient(
+  ing: { quantity: number | null; unit: string | null },
+  pantry: { quantity: number; unit: string | null; min_quantity: number },
+  scale: number,
+): boolean {
+  if (pantry.quantity <= 0) return false;
+
+  if (ing.quantity != null && ing.quantity > 0) {
+    const needed = ing.quantity * scale;
+    const ingUnit = (ing.unit ?? "").toLowerCase().trim();
+    const pantryUnit = (pantry.unit ?? "").toLowerCase().trim();
+
+    if (ingUnit === pantryUnit) {
+      return pantry.quantity >= needed;
+    } else if (ingUnit && pantryUnit) {
+      const neededConverted = convertUnit(needed, ingUnit, pantryUnit);
+      return neededConverted !== null && pantry.quantity >= neededConverted;
+    } else if (!ingUnit && !pantryUnit) {
+      return pantry.quantity >= needed;
+    }
+    // Mixed unit presence → fall back to existence + min_quantity check
+    return pantry.quantity > pantry.min_quantity;
+  }
+
+  // No quantity on ingredient — existence check
+  return pantry.quantity > pantry.min_quantity;
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -24,6 +53,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const body = await request.json().catch(() => ({}));
   const force: boolean = body?.force === true;
+  const requestedServings: number | null = body?.servings ?? null;
 
   const { data: recipe, error } = await supabase
     .from("recipes")
@@ -33,6 +63,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .single();
 
   if (error || !recipe) return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
+
+  // Compute scale based on requested vs. recipe servings
+  const scale =
+    requestedServings && recipe.servings > 0
+      ? requestedServings / recipe.servings
+      : 1;
 
   // Fetch pantry, existing unchecked shopping items, and user settings in parallel
   const [{ data: pantryItems }, { data: existingItems }, { data: settingsRow }] = await Promise.all([
@@ -46,32 +82,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   type MergeEntry = { existingId: string; addQty: number; fromUnit: string | null; toUnit: string | null };
   const toMerge: MergeEntry[] = [];
-  const toInsert: typeof recipe.recipe_ingredients = [];
+  // Store scaled ingredients for insertion
+  const toInsert: Array<typeof recipe.recipe_ingredients[number] & { _scaledQty: number | null }> = [];
 
   for (const ing of recipe.recipe_ingredients) {
     // Skip basic pantry staples
     if (isBasicIngredient(ing.name, skipIngredients)) continue;
 
-    // Skip if pantry has it and it's well-stocked (unless user forced add-all)
+    // Skip if pantry has enough for the scaled serving (unless user forced add-all)
     if (!force) {
       const pantryMatch = pantryItems?.find((p) => namesMatch(ing.name, p.name));
-      if (pantryMatch && pantryMatch.quantity > pantryMatch.min_quantity) continue;
+      if (pantryMatch && pantryCoversIngredient(ing, pantryMatch, scale)) continue;
     }
 
-    // Check if already in shopping list — match by name AND compatible units
-    const existing = existingItems?.find(
-      (s) => namesMatch(ing.name, s.name) && unitsCompatible(ing.unit, s.unit)
-    );
+    // Scale the quantity for what we're actually adding
+    const scaledQty = ing.quantity != null ? Math.round(ing.quantity * scale * 1000) / 1000 : null;
+
+    // Check if already in shopping list — match by name
+    const existing = existingItems?.find((s) => namesMatch(ing.name, s.name));
 
     if (existing) {
       toMerge.push({
         existingId: existing.id,
-        addQty: ing.quantity ?? 0,
+        addQty: scaledQty ?? 0,
         fromUnit: ing.unit ?? null,
         toUnit: existing.unit ?? null,
       });
     } else {
-      toInsert.push(ing);
+      toInsert.push({ ...ing, _scaledQty: scaledQty });
     }
   }
 
@@ -90,7 +128,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (converted !== null) qtyToAdd = converted;
       }
 
-      // Round to 3 decimal places (matches DB numeric(10,3))
       const newQty = qtyToAdd > 0
         ? Math.round(((existing.quantity ?? 0) + qtyToAdd) * 1000) / 1000
         : existing.quantity;
@@ -99,10 +136,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
   );
 
-  // Categorize and insert new items
+  // Categorize and insert new items (using scaled quantities)
   let inserted = 0;
   if (toInsert.length) {
-    const categorized = await categorizeIngredients(toInsert, storeDescriptions);
+    const forCategorization = toInsert.map((ing) => ({ ...ing, quantity: ing._scaledQty }));
+    const categorized = await categorizeIngredients(forCategorization, storeDescriptions);
     const rows = categorized.map((ing) => ({
       user_id: user.id,
       name: ing.name,

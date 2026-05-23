@@ -176,7 +176,7 @@ export default function RecipeDetailPage() {
     const res = await fetch(`/api/recipes/${id}/shopping`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ force }),
+      body: JSON.stringify({ force, servings: viewServings }),
     });
     const data = await res.json();
     setMessage(data.message || `Added ${data.added} item${data.added !== 1 ? "s" : ""} to shopping list`);
