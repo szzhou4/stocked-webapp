@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag, Pencil, Share2, Bookmark, RotateCcw, Store, LayoutList } from "lucide-react";
+import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag, Pencil, Share2, Bookmark, RotateCcw, Store, LayoutList, PackageCheck, Loader2 } from "lucide-react";
 import type { ShoppingItem } from "@/lib/types";
 import { STORE_LABELS, STORE_COLORS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
@@ -153,6 +153,10 @@ export default function ShoppingPage() {
   // Export modal
   const [showExport, setShowExport] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Purchase-all modal
+  const [showPurchaseAll, setShowPurchaseAll] = useState(false);
+  const [purchasingAll, setPurchasingAll] = useState(false);
 
   // Manual add form
   const [addingManual, setAddingManual] = useState(false);
@@ -321,6 +325,14 @@ export default function ShoppingPage() {
     await load();
   }
 
+  async function handlePurchaseAll() {
+    setPurchasingAll(true);
+    await fetch("/api/shopping/purchase-all", { method: "POST" });
+    await load();
+    setPurchasingAll(false);
+    setShowPurchaseAll(false);
+  }
+
   async function handleCopy() {
     const text = buildExportText(items, userStores);
     await navigator.clipboard.writeText(text);
@@ -360,6 +372,14 @@ export default function ShoppingPage() {
           {checked.length > 0 && (
             <button onClick={clearChecked} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
               Clear done
+            </button>
+          )}
+          {unchecked.length > 0 && (
+            <button
+              onClick={() => setShowPurchaseAll(true)}
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-emerald-600 border rounded-xl px-3 py-2 hover:border-emerald-300 transition-colors"
+            >
+              <PackageCheck size={14} /> Purchase all
             </button>
           )}
           {(unchecked.length > 0 || savedForLater.length > 0) && (
@@ -667,6 +687,44 @@ export default function ShoppingPage() {
             <div className="flex gap-3">
               <button onClick={() => setReAddModal(null)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
               <button onClick={confirmReAdd} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700">Add to list</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase-all confirmation modal */}
+      {showPurchaseAll && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
+                <PackageCheck size={20} className="text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg leading-snug">Purchase all items?</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  All {unchecked.length} item{unchecked.length !== 1 ? "s" : ""} will be marked as purchased and added to your pantry using the quantities on your list.
+                </p>
+              </div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs text-amber-800 leading-relaxed">
+              <strong>Note:</strong> This does not let you adjust quantities purchased. If you bought a different amount, open the Pantry and edit each item there after purchasing.
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPurchaseAll(false)}
+                disabled={purchasingAll}
+                className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePurchaseAll}
+                disabled={purchasingAll}
+                className="flex-1 bg-emerald-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+              >
+                {purchasingAll ? <><Loader2 size={14} className="animate-spin" /> Adding…</> : "Purchase all"}
+              </button>
             </div>
           </div>
         </div>
