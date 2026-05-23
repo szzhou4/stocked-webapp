@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Save, RotateCcw } from "lucide-react";
 import { STORE_LABELS, type Store } from "@/lib/types";
-import { DEFAULT_SETTINGS, type UserSettings } from "@/app/api/settings/route";
+import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
 const STORE_KEYS: Store[] = ["costco", "asian", "generic", "other"];
 

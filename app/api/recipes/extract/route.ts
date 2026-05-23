@@ -6,7 +6,7 @@ import {
   extractIngredientsFromImage,
   categorizeIngredients,
 } from "@/lib/claude/extract";
-import { DEFAULT_SETTINGS } from "@/app/api/settings/route";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
