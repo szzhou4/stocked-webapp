@@ -65,16 +65,33 @@ export async function PATCH(request: NextRequest) {
           .eq("id", item.pantry_item_id);
       }
     } else if (item && updates.purchased_quantity > 0) {
-      // Create new pantry item — use substituted name if provided
-      await supabase.from("pantry_items").insert({
-        user_id: user.id,
-        name: updates.name || item.name,
-        quantity: updates.purchased_quantity,
-        unit: updates.purchased_unit || item.unit,
-        category: item.category,
-        store: item.store,
-        min_quantity: 0,
-      });
+      // Check if a same-named pantry item already exists (fuzzy match) before inserting
+      const itemName = (updates.name || item.name) as string;
+      const { data: existingPantry } = await supabase
+        .from("pantry_items")
+        .select("id, quantity")
+        .eq("user_id", user.id)
+        .ilike("name", itemName)
+        .maybeSingle();
+
+      if (existingPantry) {
+        // Merge into existing item
+        await supabase
+          .from("pantry_items")
+          .update({ quantity: existingPantry.quantity + updates.purchased_quantity })
+          .eq("id", existingPantry.id);
+      } else {
+        // Create new pantry item — use substituted name if provided
+        await supabase.from("pantry_items").insert({
+          user_id: user.id,
+          name: itemName,
+          quantity: updates.purchased_quantity,
+          unit: updates.purchased_unit || item.unit,
+          category: item.category,
+          store: item.store,
+          min_quantity: 0,
+        });
+      }
     }
   }
 
