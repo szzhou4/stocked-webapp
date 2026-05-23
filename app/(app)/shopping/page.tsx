@@ -368,26 +368,28 @@ export default function ShoppingPage() {
             {unchecked.length} to buy{checked.length > 0 ? ` · ${checked.length} done` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {checked.length > 0 && (
-            <button onClick={clearChecked} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+            <button onClick={clearChecked} className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1">
               Clear done
             </button>
           )}
           {unchecked.length > 0 && (
             <button
               onClick={() => setShowPurchaseAll(true)}
-              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-emerald-600 border rounded-xl px-3 py-2 hover:border-emerald-300 transition-colors"
+              title="Purchase all"
+              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-emerald-600 border rounded-xl hover:border-emerald-300 transition-colors"
             >
-              <PackageCheck size={14} /> Purchase all
+              <PackageCheck size={16} />
             </button>
           )}
           {(unchecked.length > 0 || savedForLater.length > 0) && (
             <button
               onClick={() => setShowExport(true)}
-              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-indigo-600 border rounded-xl px-3 py-2 hover:border-indigo-300 transition-colors"
+              title="Export list"
+              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-indigo-600 border rounded-xl hover:border-indigo-300 transition-colors"
             >
-              <Share2 size={14} /> Export
+              <Share2 size={16} />
             </button>
           )}
           <button

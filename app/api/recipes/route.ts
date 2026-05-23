@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { name, source_url, image_url, source_type, source_content, tags, servings, notes, ingredients } = body;
+  const { name, source_url, image_url, source_type, source_content, tags, servings, notes, ingredients, icon } = body;
 
   const { data: recipe, error: recipeError } = await supabase
     .from("recipes")
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       source_type: source_type ?? null,
       source_content: source_content ?? null,
       tags: tags ?? [],
+      icon: icon ?? null,
       servings: servings || 4,
       notes,
     })

@@ -12,6 +12,7 @@ import type { Recipe, RecipeIngredient, PantryItem, RecipeUse } from "@/lib/type
 import { UnitSelect } from "@/components/UnitSelect";
 import { formatQuantity, isSkippedIngredient } from "@/lib/utils";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
+import { RECIPE_ICONS, getRecipeIcon } from "@/lib/recipeIcons";
 
 type EditableIngredient = {
   id?: string;
@@ -59,6 +60,7 @@ export default function RecipeDetailPage() {
   const [editName, setEditName] = useState("");
   const [editServings, setEditServings] = useState(4);
   const [editTags, setEditTags] = useState<string[]>([]);
+  const [editIcon, setEditIcon] = useState<string>("utensils");
   const [editIngredients, setEditIngredients] = useState<EditableIngredient[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -84,6 +86,7 @@ export default function RecipeDetailPage() {
     setEditName(recipe.name);
     setEditServings(recipe.servings);
     setEditTags(recipe.tags ?? []);
+    setEditIcon(recipe.icon ?? "utensils");
     const sorted = [...recipe.recipe_ingredients].sort((a, b) => a.sort_order - b.sort_order);
     setEditIngredients(sorted.map((ing) => ({
       id: ing.id,
@@ -117,6 +120,7 @@ export default function RecipeDetailPage() {
         name: editName.trim(),
         servings: editServings,
         tags: editTags,
+        icon: editIcon,
         ingredients: editIngredients
           .filter((i) => i.name.trim())
           .map((i) => ({
@@ -185,6 +189,8 @@ export default function RecipeDetailPage() {
   const missing = computeMissing(sorted, pantry, skipList);
   const allReady = missing.length === 0;
   const missingSet = new Set(missing.map((m) => m.id));
+  const iconDef = getRecipeIcon(recipe.icon);
+  const { Icon: RecipeIcon } = iconDef;
 
   // ── EDIT MODE ───────────────────────────────────────────────────
   if (editMode) {
@@ -247,6 +253,28 @@ export default function RecipeDetailPage() {
           </div>
         </div>
 
+        {/* Icon picker in edit mode */}
+        <div className="mb-4">
+          <label className="block text-xs text-gray-500 mb-2">Recipe icon</label>
+          <div className="flex gap-2 flex-wrap">
+            {RECIPE_ICONS.map(({ id, label, Icon, color, bg }) => (
+              <button
+                key={id}
+                type="button"
+                title={label}
+                onClick={() => setEditIcon(id)}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all ${
+                  editIcon === id
+                    ? `${bg} border-indigo-400`
+                    : "bg-gray-50 border-transparent hover:border-gray-200"
+                }`}
+              >
+                <Icon size={16} className={editIcon === id ? color : "text-gray-300"} />
+              </button>
+            ))}
+          </div>
+        </div>
+
         <h2 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h2>
         <div className="space-y-2 mb-3">
           {editIngredients.map((ing, i) => (
@@ -300,6 +328,9 @@ export default function RecipeDetailPage() {
         <Link href="/recipes" className="text-gray-400 hover:text-gray-600">
           <ArrowLeft size={20} />
         </Link>
+        <div className={`w-9 h-9 ${iconDef.bg} rounded-lg flex items-center justify-center shrink-0`}>
+          <RecipeIcon size={18} className={iconDef.color} />
+        </div>
         <h1 className="text-xl font-bold flex-1 truncate">{recipe.name}</h1>
         <button onClick={enterEditMode} className="text-gray-400 hover:text-indigo-600 transition-colors p-1">
           <Pencil size={16} />

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { Plus, ExternalLink, BookOpen, Utensils, CheckCircle2, AlertCircle, Search, X } from "lucide-react";
+import { Plus, ExternalLink, BookOpen, CheckCircle2, AlertCircle, Search, X } from "lucide-react";
+import { getRecipeIcon } from "@/lib/recipeIcons";
 import type { Recipe, RecipeIngredient, PantryItem } from "@/lib/types";
 import { isSkippedIngredient } from "@/lib/utils";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
@@ -170,14 +171,16 @@ export default function RecipesPage() {
           {displayed.map((recipe) => {
             const missingCount = hasPantry ? getMissingCount(recipe.recipe_ingredients, pantry, skipList) : null;
             const ready = missingCount === 0;
+            const iconDef = getRecipeIcon(recipe.icon);
+            const { Icon: RecipeIcon } = iconDef;
             return (
               <Link
                 key={recipe.id}
                 href={`/recipes/${recipe.id}`}
                 className="group flex items-center gap-3.5 bg-white rounded-xl border border-gray-200 p-4 hover:border-indigo-300 hover:shadow-sm transition-all"
               >
-                <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-indigo-100 transition-colors">
-                  <Utensils className="w-5 h-5 text-indigo-600" />
+                <div className={`w-10 h-10 ${iconDef.bg} rounded-lg flex items-center justify-center shrink-0 transition-opacity group-hover:opacity-80`}>
+                  <RecipeIcon className={`w-5 h-5 ${iconDef.color}`} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="font-semibold text-gray-900 truncate">{recipe.name}</h2>

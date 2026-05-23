@@ -8,6 +8,7 @@ import type { CategorizedIngredient } from "@/lib/claude/extract";
 import { STORE_LABELS } from "@/lib/types";
 import { UnitSelect } from "@/components/UnitSelect";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
+import { RECIPE_ICONS, selectIconForTags } from "@/lib/recipeIcons";
 
 type Mode = "url" | "image" | "text";
 
@@ -31,6 +32,7 @@ export default function NewRecipePage() {
   // Tags
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>(DEFAULT_SETTINGS.recipeTags);
+  const [selectedIcon, setSelectedIcon] = useState<string>("utensils");
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d: { settings?: UserSettings }) => {
@@ -59,9 +61,10 @@ export default function NewRecipePage() {
       if (!res.ok) throw new Error(data.error || "Extraction failed");
       setIngredients(data.ingredients);
 
-      // Pre-select Claude-suggested tags
+      // Pre-select Claude-suggested tags and auto-pick icon
       if (data.suggestedTags?.length) {
         setSelectedTags(data.suggestedTags);
+        setSelectedIcon(selectIconForTags(data.suggestedTags));
       }
 
       // Auto-fill name from URL
@@ -150,6 +153,7 @@ export default function NewRecipePage() {
           source_type,
           source_content,
           tags: selectedTags,
+          icon: selectedIcon,
           servings,
           ingredients,
         }),
@@ -283,6 +287,28 @@ export default function NewRecipePage() {
                   }`}
                 >
                   {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Icon picker */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700">Recipe icon</label>
+            <div className="flex gap-2 flex-wrap">
+              {RECIPE_ICONS.map(({ id, label, Icon, color, bg }) => (
+                <button
+                  key={id}
+                  type="button"
+                  title={label}
+                  onClick={() => setSelectedIcon(id)}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all ${
+                    selectedIcon === id
+                      ? `${bg} border-indigo-400`
+                      : "bg-gray-50 border-transparent hover:border-gray-200"
+                  }`}
+                >
+                  <Icon size={16} className={selectedIcon === id ? color : "text-gray-300"} />
                 </button>
               ))}
             </div>

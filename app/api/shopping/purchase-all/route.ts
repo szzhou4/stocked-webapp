@@ -57,7 +57,7 @@ export async function POST() {
             unit: item.unit ?? null,
             category: item.category,
             store: item.store,
-            min_quantity: 0,
+            min_quantity: 1,
           });
         }
       }

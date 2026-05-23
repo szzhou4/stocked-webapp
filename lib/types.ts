@@ -62,6 +62,7 @@ export type Recipe = {
   source_type: "url" | "image" | "text" | null;
   source_content: string | null;
   tags: string[];
+  icon: string | null;
   servings: number;
   notes: string | null;
   created_at: string;
