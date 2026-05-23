@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import type { Recipe, RecipeIngredient, PantryItem } from "@/lib/types";
 import { UNITS } from "@/lib/types";
-import { formatQuantity } from "@/lib/utils";
+import { formatQuantity, isSkippedIngredient } from "@/lib/utils";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 type EditableIngredient = {
   id?: string;
@@ -19,8 +20,9 @@ type EditableIngredient = {
   notes: string;
 };
 
-function computeMissing(ingredients: RecipeIngredient[], pantry: PantryItem[]): RecipeIngredient[] {
+function computeMissing(ingredients: RecipeIngredient[], pantry: PantryItem[], skipList: string[]): RecipeIngredient[] {
   return ingredients.filter((ing) => {
+    if (isSkippedIngredient(ing.name, skipList)) return false; // never count as missing
     const ingLower = ing.name.toLowerCase();
     const match = pantry.find(
       (p) => p.name.toLowerCase().includes(ingLower) || ingLower.includes(p.name.toLowerCase())
@@ -50,6 +52,7 @@ export default function RecipeDetailPage() {
   const router = useRouter();
   const [recipe, setRecipe] = useState<(Recipe & { recipe_ingredients: RecipeIngredient[] }) | null>(null);
   const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [skipList, setSkipList] = useState<string[]>(DEFAULT_SETTINGS.skipIngredients);
   const [loading, setLoading] = useState(true);
   const [addingToList, setAddingToList] = useState(false);
   const [cookingServings, setCookingServings] = useState<number | null>(null);
@@ -65,11 +68,16 @@ export default function RecipeDetailPage() {
   const [saving, setSaving] = useState(false);
 
   async function load() {
-    const res = await fetch(`/api/recipes/${id}`);
-    const d = await res.json();
+    const [recipeRes, settingsRes] = await Promise.all([
+      fetch(`/api/recipes/${id}`),
+      fetch("/api/settings"),
+    ]);
+    const d = await recipeRes.json();
+    const s = await settingsRes.json();
     setRecipe(d.recipe);
     setPantry(d.pantryItems || []);
     setCookingServings(d.recipe?.servings);
+    if (s.settings?.skipIngredients) setSkipList(s.settings.skipIngredients);
   }
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [id]);
@@ -173,7 +181,7 @@ export default function RecipeDetailPage() {
   );
 
   const sorted = [...recipe.recipe_ingredients].sort((a, b) => a.sort_order - b.sort_order);
-  const missing = computeMissing(sorted, pantry);
+  const missing = computeMissing(sorted, pantry, skipList);
   const allReady = missing.length === 0;
   const missingSet = new Set(missing.map((m) => m.id));
 

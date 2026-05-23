@@ -4,12 +4,15 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { Plus, ExternalLink, BookOpen, Utensils, CheckCircle2, AlertCircle, Search, X } from "lucide-react";
 import type { Recipe, RecipeIngredient, PantryItem } from "@/lib/types";
+import { isSkippedIngredient } from "@/lib/utils";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 type RecipeWithIngredients = Recipe & { recipe_ingredients: RecipeIngredient[] };
 type PantryStub = Pick<PantryItem, "name" | "quantity">;
 
-function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[]): number {
+function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[], skipList: string[]): number {
   return ingredients.filter((ing) => {
+    if (isSkippedIngredient(ing.name, skipList)) return false; // never count as missing
     const ingLower = ing.name.toLowerCase();
     const match = pantry.find(
       (p) => p.name.toLowerCase().includes(ingLower) || ingLower.includes(p.name.toLowerCase())
@@ -21,6 +24,7 @@ function getMissingCount(ingredients: RecipeIngredient[], pantry: PantryStub[]):
 export default function RecipesPage() {
   const [recipes, setRecipes] = useState<RecipeWithIngredients[]>([]);
   const [pantry, setPantry] = useState<PantryStub[]>([]);
+  const [skipList, setSkipList] = useState<string[]>(DEFAULT_SETTINGS.skipIngredients);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -28,9 +32,11 @@ export default function RecipesPage() {
     Promise.all([
       fetch("/api/recipes").then((r) => r.json()),
       fetch("/api/pantry").then((r) => r.json()),
-    ]).then(([recipesData, pantryData]) => {
+      fetch("/api/settings").then((r) => r.json()),
+    ]).then(([recipesData, pantryData, settingsData]) => {
       setRecipes(recipesData.recipes || []);
       setPantry(pantryData.items || []);
+      if (settingsData.settings?.skipIngredients) setSkipList(settingsData.settings.skipIngredients);
       setLoading(false);
     });
   }, []);
@@ -45,8 +51,8 @@ export default function RecipesPage() {
       : recipes;
 
     return [...filtered].sort((a, b) => {
-      const aM = hasPantry ? getMissingCount(a.recipe_ingredients, pantry) : null;
-      const bM = hasPantry ? getMissingCount(b.recipe_ingredients, pantry) : null;
+      const aM = hasPantry ? getMissingCount(a.recipe_ingredients, pantry, skipList) : null;
+      const bM = hasPantry ? getMissingCount(b.recipe_ingredients, pantry, skipList) : null;
       if (aM === null || bM === null) return a.name.localeCompare(b.name);
       if (aM !== bM) return aM - bM; // ready (0) first
       return a.name.localeCompare(b.name);
@@ -115,7 +121,7 @@ export default function RecipesPage() {
       ) : (
         <div className="space-y-3">
           {displayed.map((recipe) => {
-            const missingCount = hasPantry ? getMissingCount(recipe.recipe_ingredients, pantry) : null;
+            const missingCount = hasPantry ? getMissingCount(recipe.recipe_ingredients, pantry, skipList) : null;
             const ready = missingCount === 0;
             return (
               <Link

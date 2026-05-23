@@ -15,3 +15,11 @@ export function scaleQuantity(quantity: number | null, scale: number): number | 
   if (quantity === null) return null;
   return Math.round(quantity * scale * 1000) / 1000;
 }
+
+/** Returns true if an ingredient name matches any entry in the user's skip list. */
+export function isSkippedIngredient(name: string, skipList: string[]): boolean {
+  const lower = name.toLowerCase().trim();
+  return skipList.some(
+    (skip) => lower === skip || lower.startsWith(skip + " ") || lower.endsWith(" " + skip)
+  );
+}
