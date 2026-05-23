@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, Save, RotateCcw, Plus, Trash2, X, Tag, KeyRound, Eye, EyeOff } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, RotateCcw, Plus, Trash2, X, Tag, KeyRound, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { STORE_COLORS, DEFAULT_STORE_COLOR } from "@/lib/types";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/client";
 
+type SaveStatus = "idle" | "saving" | "saved";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [newStoreName, setNewStoreName] = useState("");
+
+  // Track the last-persisted settings JSON to avoid saving on initial load
+  const savedRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newSkipItem, setNewSkipItem] = useState("");
   const [newTag, setNewTag] = useState("");
 
@@ -24,12 +28,42 @@ export default function SettingsPage() {
   const [pwError, setPwError] = useState("");
   const [pwSaved, setPwSaved] = useState(false);
 
+  // Load settings and seed the saved reference
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((d) => { if (d.settings) setSettings(d.settings); })
+      .then((d) => {
+        const loaded = d.settings ?? DEFAULT_SETTINGS;
+        savedRef.current = JSON.stringify(loaded);
+        setSettings(loaded);
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  // Auto-save: debounce 800 ms after any settings change
+  useEffect(() => {
+    if (savedRef.current === null) return; // not yet loaded
+    const current = JSON.stringify(settings);
+    if (current === savedRef.current) return; // nothing changed
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus("saving");
+
+    saveTimerRef.current = setTimeout(async () => {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      savedRef.current = current;
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    }, 800);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [settings]);
 
   function updateStoreName(key: string, name: string) {
     setSettings((s) => ({ ...s, stores: { ...s.stores, [key]: { ...s.stores[key], name } } }));
@@ -89,19 +123,6 @@ export default function SettingsPage() {
     setSettings((s) => ({ ...s, recipeTags: (s.recipeTags ?? []).filter((t) => t !== tag) }));
   }
 
-  async function handleSave() {
-    setSaving(true);
-    setSaved(false);
-    await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
-
   function handleReset() {
     if (!confirm("Reset all settings to defaults?")) return;
     setSettings(DEFAULT_SETTINGS);
@@ -145,19 +166,21 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Settings</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Customize stores and defaults</p>
+          <p className="text-sm text-gray-500 mt-0.5">Changes save automatically</p>
         </div>
         <div className="flex items-center gap-2">
+          {saveStatus === "saving" && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Loader2 size={12} className="animate-spin" /> Saving…
+            </span>
+          )}
+          {saveStatus === "saved" && (
+            <span className="flex items-center gap-1.5 text-xs text-green-600">
+              <CheckCircle2 size={12} /> Saved
+            </span>
+          )}
           <button onClick={handleReset} className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Reset to defaults">
             <RotateCcw size={16} />
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 bg-indigo-600 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {saved ? "Saved!" : "Save"}
           </button>
         </div>
       </div>
