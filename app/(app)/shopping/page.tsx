@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag, Pencil, Share2, Bookmark, RotateCcw } from "lucide-react";
+import { Plus, Check, X, ChevronDown, ChevronUp, ShoppingBag, Pencil, Share2, Bookmark, RotateCcw, Store, LayoutList } from "lucide-react";
 import type { ShoppingItem } from "@/lib/types";
 import { STORE_LABELS, STORE_COLORS, CATEGORIES, UNITS, getStoreLabel, getStoreColor } from "@/lib/types";
 import { formatQuantity } from "@/lib/utils";
@@ -19,6 +19,24 @@ function groupItems(items: ShoppingItem[]): GroupedItems {
   }
   return result;
 }
+
+// Category → items (sorted within each category by store then name)
+type CategoryGrouped = Record<string, ShoppingItem[]>;
+
+function groupByCategory(items: ShoppingItem[]): CategoryGrouped {
+  const result: CategoryGrouped = {};
+  for (const item of items) {
+    if (!result[item.category]) result[item.category] = [];
+    result[item.category].push(item);
+  }
+  // Sort items within each category: by store key, then name
+  for (const cat of Object.keys(result)) {
+    result[cat].sort((a, b) => a.store.localeCompare(b.store) || a.name.localeCompare(b.name));
+  }
+  return result;
+}
+
+type SortMode = "store" | "category";
 
 function UnitSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   const isCustom = value && !UNITS.includes(value as typeof UNITS[number]);
@@ -59,11 +77,56 @@ function buildExportText(
   return lines.join("\n").trim();
 }
 
+function ItemRow({
+  item, checkingId, onCheck, onSave, onEdit, onDelete, showStoreBadge, userStores,
+}: {
+  item: ShoppingItem;
+  checkingId: string | null;
+  onCheck: (item: ShoppingItem) => void;
+  onSave: (item: ShoppingItem) => void;
+  onEdit: (item: ShoppingItem) => void;
+  onDelete: (id: string) => void;
+  showStoreBadge?: boolean;
+  userStores?: UserSettings["stores"];
+}) {
+  return (
+    <div className="flex items-center gap-2 bg-white border rounded-lg px-3 py-2.5">
+      <button
+        onClick={() => onCheck(item)}
+        disabled={checkingId === item.id}
+        className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 transition-colors shrink-0"
+      />
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium">{item.name}</span>
+        {(item.quantity || item.unit) && (
+          <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
+        )}
+      </div>
+      {showStoreBadge && (
+        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0", getStoreColor(item.store))}>
+          {getStoreLabel(item.store, userStores ?? {})}
+        </span>
+      )}
+      <button onClick={() => onSave(item)} className="text-gray-300 hover:text-amber-500 transition-colors p-1" title="Save for later">
+        <Bookmark size={13} />
+      </button>
+      <button onClick={() => onEdit(item)} className="text-gray-300 hover:text-indigo-500 transition-colors p-1">
+        <Pencil size={13} />
+      </button>
+      <button onClick={() => onDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors p-1">
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
 export default function ShoppingPage() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const [sortMode, setSortMode] = useState<SortMode>("store");
   const [collapsedStores, setCollapsedStores] = useState<Set<string>>(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [checkingId, setCheckingId] = useState<string | null>(null);
 
   // Purchase confirmation modal
@@ -117,6 +180,14 @@ export default function ShoppingPage() {
     setCollapsedStores((prev) => {
       const next = new Set(prev);
       next.has(store) ? next.delete(store) : next.add(store);
+      return next;
+    });
+  }
+
+  function toggleCategory(cat: string) {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
       return next;
     });
   }
@@ -270,6 +341,8 @@ export default function ShoppingPage() {
   const checked = items.filter((i) => i.checked);
   const savedForLater = items.filter((i) => i.saved_for_later && !i.checked);
   const grouped = groupItems(unchecked);
+  const groupedByCategory = groupByCategory(unchecked);
+  const sortedCategories = Object.keys(groupedByCategory).sort((a, b) => a.localeCompare(b));
   const exportText = buildExportText(items, userStores);
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
@@ -305,6 +378,28 @@ export default function ShoppingPage() {
           </button>
         </div>
       </div>
+
+      {/* Sort mode toggle */}
+      {unchecked.length > 0 && (
+        <div className="flex items-center gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+          <button
+            onClick={() => setSortMode("store")}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
+              sortMode === "store" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Store size={12} /> By store
+          </button>
+          <button
+            onClick={() => setSortMode("category")}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
+              sortMode === "category" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <LayoutList size={12} /> By category
+          </button>
+        </div>
+      )}
 
       {/* Manual add form */}
       {addingManual && (
@@ -350,7 +445,7 @@ export default function ShoppingPage() {
       )}
 
       {/* Grouped by store */}
-      {storeOrder.filter((s) => grouped[s] && Object.keys(grouped[s]).length > 0).map((store) => (
+      {sortMode === "store" && storeOrder.filter((s) => grouped[s] && Object.keys(grouped[s]).length > 0).map((store) => (
         <div key={store} className="mb-4">
           <button onClick={() => toggleStore(store)} className="w-full flex items-center justify-between mb-2">
             <span className={cn("px-2.5 py-1 rounded-full text-sm font-semibold", getStoreColor(store))}>
@@ -367,36 +462,39 @@ export default function ShoppingPage() {
               <p className="text-xs uppercase tracking-wide text-gray-400 font-medium mb-1.5 ml-1">{category}</p>
               <div className="space-y-1.5">
                 {catItems.map((item) => (
-                  <div key={item.id} className="flex items-center gap-2 bg-white border rounded-lg px-3 py-2.5">
-                    <button
-                      onClick={() => openPurchaseModal(item)}
-                      disabled={checkingId === item.id}
-                      className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 transition-colors shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium">{item.name}</span>
-                      {(item.quantity || item.unit) && (
-                        <span className="text-xs text-gray-400 ml-1.5">{formatQuantity(item.quantity, item.unit)}</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => saveForLater(item)}
-                      className="text-gray-300 hover:text-amber-500 transition-colors p-1"
-                      title="Save for later"
-                    >
-                      <Bookmark size={13} />
-                    </button>
-                    <button onClick={() => openEditModal(item)} className="text-gray-300 hover:text-indigo-500 transition-colors p-1">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => handleDelete(item.id)} className="text-gray-200 hover:text-red-400 transition-colors p-1">
-                      <X size={14} />
-                    </button>
-                  </div>
+                  <ItemRow key={item.id} item={item} checkingId={checkingId}
+                    onCheck={openPurchaseModal} onSave={saveForLater}
+                    onEdit={openEditModal} onDelete={handleDelete} />
                 ))}
               </div>
             </div>
           ))}
+        </div>
+      ))}
+
+      {/* Grouped by category */}
+      {sortMode === "category" && sortedCategories.map((cat) => (
+        <div key={cat} className="mb-4">
+          <button onClick={() => toggleCategory(cat)} className="w-full flex items-center justify-between mb-2">
+            <span className="px-2.5 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-700 capitalize">
+              {cat}
+            </span>
+            {collapsedCategories.has(cat)
+              ? <ChevronDown size={16} className="text-gray-400" />
+              : <ChevronUp size={16} className="text-gray-400" />
+            }
+          </button>
+
+          {!collapsedCategories.has(cat) && (
+            <div className="space-y-1.5">
+              {groupedByCategory[cat].map((item) => (
+                <ItemRow key={item.id} item={item} checkingId={checkingId}
+                  onCheck={openPurchaseModal} onSave={saveForLater}
+                  onEdit={openEditModal} onDelete={handleDelete}
+                  showStoreBadge userStores={userStores} />
+              ))}
+            </div>
+          )}
         </div>
       ))}
 
