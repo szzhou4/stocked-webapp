@@ -38,6 +38,12 @@ export default function PantryPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [useModal, setUseModal] = useState<PantryItem | null>(null);
   const [useAmount, setUseAmount] = useState("");
+  // "add to shopping list" fields shown when use would empty the item
+  const [useAddToList, setUseAddToList] = useState(true);
+  const [useListQty, setUseListQty] = useState("");
+  const [useListUnit, setUseListUnit] = useState("");
+  const [useListStore, setUseListStore] = useState("");
+  const [useListCategory, setUseListCategory] = useState("");
   // Tracks item IDs where "Add to list" was just tapped (for brief confirmation)
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
@@ -135,6 +141,21 @@ export default function PantryPage() {
     await load();
   }
 
+  function openUseModal(item: PantryItem) {
+    setUseModal(item);
+    setUseAmount("");
+    setUseAddToList(true);
+    setUseListQty("");
+    setUseListUnit(item.unit || "");
+    setUseListStore(item.store);
+    setUseListCategory(item.category);
+  }
+
+  function closeUseModal() {
+    setUseModal(null);
+    setUseAmount("");
+  }
+
   async function handleUse() {
     if (!useModal) return;
     const amount = parseFloat(useAmount);
@@ -143,6 +164,19 @@ export default function PantryPage() {
 
     if (newQty <= 0) {
       await deleteItem(useModal.id);
+      if (useAddToList) {
+        await fetch("/api/shopping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: useModal.name,
+            quantity: parseFloat(useListQty) || null,
+            unit: useListUnit || null,
+            store: useListStore,
+            category: useListCategory,
+          }),
+        });
+      }
     } else {
       await fetch("/api/pantry", {
         method: "PATCH",
@@ -150,8 +184,7 @@ export default function PantryPage() {
         body: JSON.stringify({ id: useModal.id, quantity: newQty }),
       });
     }
-    setUseModal(null);
-    setUseAmount("");
+    closeUseModal();
     await load();
   }
 
@@ -307,7 +340,7 @@ export default function PantryPage() {
                     <div className="flex items-center gap-1">
                       {!isEditing && (
                         <button
-                          onClick={() => setUseModal(item)}
+                          onClick={() => openUseModal(item)}
                           className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors px-2 py-1 rounded-lg hover:bg-indigo-50"
                         >
                           <Minus size={12} /> Use
@@ -415,53 +448,132 @@ export default function PantryPage() {
       ))}
 
       {/* Use modal */}
-      {useModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
-            <div>
-              <h3 className="font-semibold text-lg">{useModal.name}</h3>
-              <p className="text-gray-500 text-sm">
-                Current stock: <strong>{formatQuantity(useModal.quantity, useModal.unit)}</strong>
-              </p>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Amount used</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={useAmount}
-                  onChange={(e) => setUseAmount(e.target.value)}
-                  placeholder="0"
-                  min={0}
-                  step={0.5}
-                  autoFocus
-                  className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <span className="self-center text-sm text-gray-500">{useModal.unit || "units"}</span>
-              </div>
-              {useAmount && parseFloat(useAmount) > 0 && (
-                <p className="text-xs text-gray-400 mt-1">
-                  {Math.max(0, useModal.quantity - parseFloat(useAmount)) <= 0
-                    ? "This will remove the item from your pantry."
-                    : `Remaining: ${formatQuantity(Math.max(0, useModal.quantity - parseFloat(useAmount)), useModal.unit)}`
-                  }
+      {useModal && (() => {
+        const remaining = parseFloat(useAmount) > 0
+          ? Math.max(0, Math.round((useModal.quantity - parseFloat(useAmount)) * 1000) / 1000)
+          : null;
+        const willEmpty = remaining !== null && remaining <= 0;
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm space-y-4 p-6">
+              <div>
+                <h3 className="font-semibold text-lg">{useModal.name}</h3>
+                <p className="text-gray-500 text-sm">
+                  Current stock: <strong>{formatQuantity(useModal.quantity, useModal.unit)}</strong>
                 </p>
+              </div>
+
+              {/* Amount row */}
+              <div>
+                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1 block">Amount used</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={useAmount}
+                    onChange={(e) => setUseAmount(e.target.value)}
+                    placeholder="0"
+                    min={0}
+                    step={0.5}
+                    autoFocus
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <span className="self-center text-sm text-gray-500">{useModal.unit || "units"}</span>
+                </div>
+                {remaining !== null && !willEmpty && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Remaining: {formatQuantity(remaining, useModal.unit)}
+                  </p>
+                )}
+              </div>
+
+              {/* Empty-item alert + add-to-list form */}
+              {willEmpty && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 overflow-hidden">
+                  <div className="flex items-start gap-2 px-3 pt-3 pb-2">
+                    <AlertTriangle size={15} className="text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-sm font-semibold text-amber-800">
+                      This will remove <span className="italic">{useModal.name}</span> from your pantry.
+                    </p>
+                  </div>
+
+                  {/* Toggle */}
+                  <button
+                    onClick={() => setUseAddToList((v) => !v)}
+                    className="w-full flex items-center justify-between px-3 py-2 border-t border-amber-200 hover:bg-amber-100 transition-colors"
+                  >
+                    <span className="text-sm font-medium text-amber-900">Add to shopping list?</span>
+                    <div className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${useAddToList ? "bg-indigo-500" : "bg-gray-300"}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${useAddToList ? "translate-x-5" : "translate-x-0"}`} />
+                    </div>
+                  </button>
+
+                  {/* Shopping list detail form */}
+                  {useAddToList && (
+                    <div className="px-3 pb-3 pt-2 border-t border-amber-200 space-y-2">
+                      <div className="flex gap-2">
+                        <div className="w-24">
+                          <label className="text-[10px] text-amber-700 uppercase tracking-wide mb-0.5 block">Qty</label>
+                          <input
+                            type="number"
+                            value={useListQty}
+                            onChange={(e) => setUseListQty(e.target.value)}
+                            placeholder="—"
+                            className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-amber-700 uppercase tracking-wide mb-0.5 block">Unit</label>
+                          <UnitSelect
+                            value={useListUnit}
+                            onChange={setUseListUnit}
+                            className="w-full border-amber-200 bg-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-amber-700 uppercase tracking-wide mb-0.5 block">Store</label>
+                        <select
+                          value={useListStore}
+                          onChange={(e) => setUseListStore(e.target.value)}
+                          className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                        >
+                          {Object.entries(allStores).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-amber-700 uppercase tracking-wide mb-0.5 block">Category</label>
+                        <select
+                          value={useListCategory}
+                          onChange={(e) => setUseListCategory(e.target.value)}
+                          className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                        >
+                          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => { setUseModal(null); setUseAmount(""); }}
-                className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleUse}
-                disabled={!useAmount || parseFloat(useAmount) <= 0}
-                className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-                Mark as used
-              </button>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={closeUseModal}
+                  className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUse}
+                  disabled={!useAmount || parseFloat(useAmount) <= 0}
+                  className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {willEmpty && useAddToList ? "Remove & add to list" : "Mark as used"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
