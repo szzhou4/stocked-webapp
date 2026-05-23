@@ -89,7 +89,7 @@ export async function PATCH(request: NextRequest) {
           unit: updates.purchased_unit || item.unit,
           category: item.category,
           store: item.store,
-          min_quantity: 1,
+          min_quantity: 3,
         });
       }
     }
