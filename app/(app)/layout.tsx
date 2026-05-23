@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import NavBar from "@/components/nav-bar";
 import AppHeader from "@/components/app-header";
+import OnboardingProvider from "@/components/OnboardingProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -13,6 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppHeader />
       <main className="flex-1 pb-20">{children}</main>
       <NavBar />
+      <OnboardingProvider />
     </div>
   );
 }
