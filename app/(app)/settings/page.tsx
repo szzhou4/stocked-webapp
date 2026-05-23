@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, RotateCcw, Plus, Trash2, X, Tag } from "lucide-react";
+import { Loader2, Save, RotateCcw, Plus, Trash2, X, Tag, KeyRound, Eye, EyeOff } from "lucide-react";
 import { STORE_COLORS, DEFAULT_STORE_COLOR } from "@/lib/types";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
+import { createClient } from "@/lib/supabase/client";
 
 
 export default function SettingsPage() {
@@ -14,6 +15,14 @@ export default function SettingsPage() {
   const [newStoreName, setNewStoreName] = useState("");
   const [newSkipItem, setNewSkipItem] = useState("");
   const [newTag, setNewTag] = useState("");
+
+  // Password change state
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pwSaved, setPwSaved] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -96,6 +105,31 @@ export default function SettingsPage() {
   function handleReset() {
     if (!confirm("Reset all settings to defaults?")) return;
     setSettings(DEFAULT_SETTINGS);
+  }
+
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError("");
+    if (newPassword.length < 8) {
+      setPwError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError("Passwords don't match.");
+      return;
+    }
+    setPwSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setPwError(error.message);
+    } else {
+      setPwSaved(true);
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPwSaved(false), 3000);
+    }
+    setPwSaving(false);
   }
 
   if (loading) return (
@@ -286,6 +320,58 @@ export default function SettingsPage() {
               <Plus size={14} /> Add
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Change password */}
+      <div className="mt-6">
+        <div className="mb-2">
+          <h2 className="font-semibold text-gray-800 flex items-center gap-1.5"><KeyRound size={15} /> Change password</h2>
+          <p className="text-xs text-gray-500">Choose a unique password you don&apos;t use anywhere else.</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4">
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">New password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  minLength={8}
+                  placeholder="Min. 8 characters"
+                  className="w-full border rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Confirm new password</label>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            {pwError && <p className="text-red-500 text-xs">{pwError}</p>}
+            {pwSaved && <p className="text-green-600 text-xs font-medium">Password updated successfully.</p>}
+            <button
+              type="submit"
+              disabled={pwSaving || !newPassword || !confirmPassword}
+              className="flex items-center gap-1.5 bg-gray-800 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-900 disabled:opacity-40 transition-colors"
+            >
+              {pwSaving ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+              {pwSaving ? "Updating…" : "Update password"}
+            </button>
+          </form>
         </div>
       </div>
 
