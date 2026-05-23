@@ -5,7 +5,6 @@ import { Loader2, Save, RotateCcw, Plus, Trash2, X, Tag } from "lucide-react";
 import { STORE_COLORS, DEFAULT_STORE_COLOR } from "@/lib/types";
 import { DEFAULT_SETTINGS, type UserSettings } from "@/lib/settings";
 
-const DEFAULT_STORE_KEYS = ["costco", "asian", "generic", "other"];
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
@@ -45,10 +44,13 @@ export default function SettingsPage() {
   }
 
   function removeStore(key: string) {
-    if (DEFAULT_STORE_KEYS.includes(key)) return; // can't remove defaults
     setSettings((s) => {
       const { [key]: _, ...rest } = s.stores;
-      return { ...s, stores: rest };
+      // If deleting the default store, fall back to the first remaining store
+      const newDefault = s.defaultStore === key
+        ? Object.keys(rest)[0] ?? "generic"
+        : s.defaultStore;
+      return { ...s, stores: rest, defaultStore: newDefault };
     });
   }
 
@@ -151,22 +153,16 @@ export default function SettingsPage() {
 
       <div className="space-y-3 mb-4">
         {storeKeys.map((key) => {
-          const isDefault = DEFAULT_STORE_KEYS.includes(key);
           const color = STORE_COLORS[key] ?? DEFAULT_STORE_COLOR;
           return (
             <div key={key} className="bg-white border rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${color}`}>
-                    {settings.stores[key].name}
-                  </span>
-                  {isDefault && <span className="text-[10px] text-gray-400 uppercase tracking-wide">default</span>}
-                </div>
-                {!isDefault && (
-                  <button onClick={() => removeStore(key)} className="text-gray-300 hover:text-red-400 transition-colors">
-                    <Trash2 size={14} />
-                  </button>
-                )}
+                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${color}`}>
+                  {settings.stores[key].name}
+                </span>
+                <button onClick={() => removeStore(key)} className="text-gray-300 hover:text-red-400 transition-colors">
+                  <Trash2 size={14} />
+                </button>
               </div>
               <div className="space-y-2">
                 <div>
