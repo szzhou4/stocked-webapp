@@ -399,6 +399,18 @@ export default function SettingsPage() {
       </div>
 
       <p className="text-xs text-gray-400 text-center mt-5">Changes to AI descriptions take effect on the next recipe import.</p>
+
+      {/* About link */}
+      <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+        <a
+          href="https://statslabatcmc.com/stocked-webapp"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-indigo-500 hover:text-indigo-700 hover:underline transition-colors"
+        >
+          Learn more about the app and get in touch →
+        </a>
+      </div>
     </div>
   );
 }
