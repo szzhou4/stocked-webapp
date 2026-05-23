@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, ShoppingCart, ChefHat, ExternalLink, Trash2, Loader2,
   CheckCircle2, AlertCircle, Pencil, Plus, X, Check, Tag,
-  FileText, ImageIcon, History, ChevronDown, ChevronUp,
+  FileText, ImageIcon, History, ChevronDown, ChevronUp, Archive, ArchiveRestore,
 } from "lucide-react";
 import type { Recipe, RecipeIngredient, PantryItem, RecipeUse } from "@/lib/types";
 import { UnitSelect } from "@/components/UnitSelect";
@@ -204,6 +204,21 @@ export default function RecipeDetailPage() {
     setCooking(false);
   }
 
+  async function handleToggleArchive() {
+    if (!recipe) return;
+    const newArchived = !recipe.archived;
+    await fetch(`/api/recipes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: newArchived }),
+    });
+    if (newArchived) {
+      router.push("/recipes");
+    } else {
+      setRecipe((r) => r ? { ...r, archived: false } : r);
+    }
+  }
+
   async function handleDelete() {
     if (!confirm("Delete this recipe?")) return;
     await fetch(`/api/recipes/${id}`, { method: "DELETE" });
@@ -383,6 +398,13 @@ export default function RecipeDetailPage() {
         <button onClick={enterEditMode} className="text-gray-400 hover:text-indigo-600 transition-colors p-1">
           <Pencil size={16} />
         </button>
+        <button
+          onClick={handleToggleArchive}
+          title={recipe.archived ? "Restore recipe" : "Archive recipe"}
+          className={`transition-colors p-1 ${recipe.archived ? "text-amber-500 hover:text-amber-700" : "text-gray-300 hover:text-amber-500"}`}
+        >
+          {recipe.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+        </button>
         <button onClick={handleDelete} className="text-gray-300 hover:text-red-400 transition-colors p-1">
           <Trash2 size={16} />
         </button>
@@ -457,6 +479,17 @@ export default function RecipeDetailPage() {
               {tag}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Archived banner */}
+      {recipe.archived && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-700">
+          <Archive size={13} className="shrink-0" />
+          <span className="flex-1">This recipe is archived and hidden from your main list.</span>
+          <button onClick={handleToggleArchive} className="font-semibold hover:text-amber-900 shrink-0 transition-colors">
+            Restore
+          </button>
         </div>
       )}
 

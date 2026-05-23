@@ -63,6 +63,7 @@ export type Recipe = {
   source_content: string | null;
   tags: string[];
   icon: string | null;
+  archived: boolean;
   servings: number;
   notes: string | null;
   created_at: string;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { Plus, ExternalLink, BookOpen, CheckCircle2, AlertCircle, Search, X } from "lucide-react";
+import { Plus, ExternalLink, BookOpen, CheckCircle2, AlertCircle, Search, X, Archive, ArchiveRestore, ChevronDown, ChevronUp } from "lucide-react";
 import { getRecipeIcon } from "@/lib/recipeIcons";
 import type { Recipe, RecipeIngredient, PantryItem } from "@/lib/types";
 import { isSkippedIngredient } from "@/lib/utils";
@@ -30,6 +30,7 @@ export default function RecipesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -46,19 +47,20 @@ export default function RecipesPage() {
   }, []);
 
   const hasPantry = pantry.length > 0;
+  const activeRecipes = useMemo(() => recipes.filter((r) => !r.archived), [recipes]);
+  const archivedRecipes = useMemo(() => recipes.filter((r) => r.archived), [recipes]);
 
-  // Tags that appear on at least one saved recipe (for the filter chips row)
+  // Tags that appear on at least one active (non-archived) recipe
   const usedTags = useMemo(() => {
     const tagSet = new Set<string>();
-    recipes.forEach((r) => (r.tags ?? []).forEach((t) => tagSet.add(t)));
-    // Preserve the settings order so the row is stable
+    activeRecipes.forEach((r) => (r.tags ?? []).forEach((t) => tagSet.add(t)));
     return availableTags.filter((t) => tagSet.has(t));
-  }, [recipes, availableTags]);
+  }, [activeRecipes, availableTags]);
 
   const displayed = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    const filtered = recipes.filter((r) => {
+    const filtered = activeRecipes.filter((r) => {
       const matchesSearch = !q
         || r.name.toLowerCase().includes(q)
         || (r.tags ?? []).some((t) => t.toLowerCase().includes(q))
@@ -74,7 +76,16 @@ export default function RecipesPage() {
       if (aM !== bM) return aM - bM;
       return a.name.localeCompare(b.name);
     });
-  }, [recipes, pantry, search, activeTag, hasPantry, skipList]);
+  }, [activeRecipes, pantry, search, activeTag, hasPantry, skipList]);
+
+  async function handleUnarchive(recipeId: string) {
+    await fetch(`/api/recipes/${recipeId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: false }),
+    });
+    setRecipes((prev) => prev.map((r) => r.id === recipeId ? { ...r, archived: false } : r));
+  }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
@@ -84,7 +95,7 @@ export default function RecipesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Recipes</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} saved
+            {activeRecipes.length} {activeRecipes.length === 1 ? "recipe" : "recipes"} saved
           </p>
         </div>
         <Link
@@ -97,7 +108,7 @@ export default function RecipesPage() {
       </div>
 
       {/* Search bar */}
-      {recipes.length > 0 && (
+      {activeRecipes.length > 0 && (
         <div className="relative mb-3">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           <input
@@ -133,7 +144,7 @@ export default function RecipesPage() {
         </div>
       )}
 
-      {recipes.length === 0 ? (
+      {activeRecipes.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-6 py-16 text-center">
           <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mx-auto mb-4">
             <BookOpen className="w-6 h-6 text-indigo-600" />
@@ -208,6 +219,59 @@ export default function RecipesPage() {
               </Link>
             );
           })}
+        </div>
+      )}
+      {/* Archived section */}
+      {archivedRecipes.length > 0 && (
+        <div className="mt-10 pt-5 border-t border-gray-200">
+          <button
+            onClick={() => setShowArchived((v) => !v)}
+            className="flex items-center gap-2 w-full text-sm text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <Archive size={14} />
+            <span className="font-medium">Archived ({archivedRecipes.length})</span>
+            {showArchived
+              ? <ChevronUp size={14} className="ml-auto" />
+              : <ChevronDown size={14} className="ml-auto" />
+            }
+          </button>
+
+          {showArchived && (
+            <div className="mt-3 space-y-2">
+              {archivedRecipes.map((recipe) => {
+                const iconDef = getRecipeIcon(recipe.icon);
+                const { Icon: RecipeIcon } = iconDef;
+                return (
+                  <div key={recipe.id} className="flex items-center gap-3 bg-gray-50 rounded-xl border border-gray-200 px-3 py-2.5">
+                    <div className={`w-8 h-8 ${iconDef.bg} rounded-lg flex items-center justify-center shrink-0 opacity-50`}>
+                      <RecipeIcon className={`w-4 h-4 ${iconDef.color}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/recipes/${recipe.id}`}
+                        className="text-sm font-medium text-gray-500 hover:text-gray-700 truncate block transition-colors"
+                      >
+                        {recipe.name}
+                      </Link>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className="text-xs text-gray-400">{recipe.servings} servings</span>
+                        {(recipe.tags ?? []).slice(0, 2).map((tag) => (
+                          <span key={tag} className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleUnarchive(recipe.id)}
+                      title="Restore recipe"
+                      className="flex items-center gap-1 text-xs font-medium text-indigo-500 hover:text-indigo-700 shrink-0 transition-colors"
+                    >
+                      <ArchiveRestore size={13} /> Restore
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
