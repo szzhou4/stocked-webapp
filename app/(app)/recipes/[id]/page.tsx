@@ -138,11 +138,15 @@ export default function RecipeDetailPage() {
     setSaving(false);
   }
 
-  async function doAddToShoppingList() {
+  async function doAddToShoppingList(force = false) {
     setShowConfirm(false);
     setAddingToList(true);
     setMessage("");
-    const res = await fetch(`/api/recipes/${id}/shopping`, { method: "POST" });
+    const res = await fetch(`/api/recipes/${id}/shopping`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force }),
+    });
     const data = await res.json();
     setMessage(data.message || `Added ${data.added} item${data.added !== 1 ? "s" : ""} to shopping list`);
     setAddingToList(false);
@@ -523,7 +527,7 @@ export default function RecipeDetailPage() {
               <button onClick={() => setShowConfirm(false)} className="flex-1 border rounded-xl py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                 Cancel
               </button>
-              <button onClick={doAddToShoppingList} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors">
+              <button onClick={() => doAddToShoppingList(allReady)} className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-indigo-700 transition-colors">
                 Add to list
               </button>
             </div>

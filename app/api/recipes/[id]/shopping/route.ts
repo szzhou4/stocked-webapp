@@ -22,6 +22,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const body = await request.json().catch(() => ({}));
+  const force: boolean = body?.force === true;
+
   const { data: recipe, error } = await supabase
     .from("recipes")
     .select("*, recipe_ingredients(*)")
@@ -49,9 +52,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Skip basic pantry staples
     if (isBasicIngredient(ing.name, skipIngredients)) continue;
 
-    // Skip if pantry has it and it's well-stocked
-    const pantryMatch = pantryItems?.find((p) => namesMatch(ing.name, p.name));
-    if (pantryMatch && pantryMatch.quantity > pantryMatch.min_quantity) continue;
+    // Skip if pantry has it and it's well-stocked (unless user forced add-all)
+    if (!force) {
+      const pantryMatch = pantryItems?.find((p) => namesMatch(ing.name, p.name));
+      if (pantryMatch && pantryMatch.quantity > pantryMatch.min_quantity) continue;
+    }
 
     // Check if already in shopping list — match by name AND compatible units
     const existing = existingItems?.find(
